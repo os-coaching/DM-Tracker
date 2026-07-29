@@ -29,6 +29,12 @@
   --line:#262B35;
   --line-soft:#1D212A;
   --radius:10px;
+  /* chart palette, validated with the dataviz validator against surface #171A21.
+     Blue ramp + red ramp both pass all ordinal checks; grey clears 3.43:1. */
+  --b1:#1B4BB8; --b2:#2F6DFF; --b3:#5D95FF; --b4:#9BC0FF;
+  --r1:#9E271E; --r2:#C2382C; --r3:#F0574A; --r4:#FF9187;
+  --dim:#656F7F;
+  --track:#20252F;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--text)}
@@ -224,6 +230,125 @@ select.stage option{background:var(--surface-2);color:var(--text)}
 
 .empty{color:var(--faint);font-size:13.5px;padding:44px 0;text-align:center}
 
+/* ---------- statistics ---------- */
+.srow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:16px 0 4px}
+.srow .sp{flex:1}
+.seg{display:flex;gap:2px;background:var(--surface);border-radius:8px;padding:2px}
+.seg button{
+  appearance:none;border:none;background:none;font:inherit;font-size:12px;color:var(--muted);
+  padding:5px 11px;border-radius:6px;cursor:pointer;
+}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--accent);color:#fff;font-weight:600}
+
+.card{background:var(--surface);border-radius:var(--radius);padding:15px 17px;margin-bottom:10px}
+.card h4{
+  font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);
+  font-weight:600;margin-bottom:2px;
+}
+.card .csub{font-size:12px;color:var(--faint);margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+
+/* hero + kpi tiles */
+.tile .big{font-size:27px;font-weight:660;letter-spacing:-.025em;margin-top:4px}
+.tile .sub{font-size:12px;color:var(--faint);margin-top:3px}
+.tile .sub b{color:var(--muted);font-weight:600}
+
+/* meters (single ratio against a limit) */
+.meter{margin-top:13px}
+.meter:first-of-type{margin-top:4px}
+.meter .top{display:flex;align-items:baseline;gap:8px;font-size:13px;margin-bottom:6px}
+.meter .top .lbl{flex:1;color:var(--muted)}
+.meter .top .val{font-weight:650;font-variant-numeric:tabular-nums}
+.meter .top .val i{font-style:normal;color:var(--faint);font-weight:500}
+.mtrack{height:7px;background:var(--track);border-radius:4px;overflow:hidden}
+.mfill{height:100%;background:var(--b2);border-radius:0 4px 4px 0}
+.mfill.done{background:var(--b3)}
+.mfill.zero{background:var(--dim)}
+
+/* funnel: horizontal bars, sequential ramp */
+.fn{display:flex;flex-direction:column;gap:9px}
+.fnrow{display:grid;grid-template-columns:118px 1fr auto;align-items:center;gap:11px}
+.fnrow .fl{font-size:12.5px;color:var(--muted)}
+.ftrack{height:20px;background:var(--track);border-radius:3px;position:relative}
+.ffill{height:100%;border-radius:0 4px 4px 0;min-width:2px}
+.fnrow .fv{font-size:13px;font-weight:650;font-variant-numeric:tabular-nums;min-width:58px;text-align:right}
+.fnrow .fv span{font-weight:500;color:var(--faint);font-size:11.5px}
+
+/* columns */
+.cols{display:flex;align-items:stretch;gap:5px;height:126px;padding-top:6px}
+.cols .col{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}
+/* the bar scales against this box only, so it is never flex-shrunk out of proportion */
+.cols .cplot{flex:1;min-height:0;display:flex;align-items:flex-end}
+.cols .cbar{
+  border-radius:4px 4px 0 0;background:var(--b2);min-height:2px;
+  width:100%;max-width:24px;margin:0 auto;   /* cap thickness, let the band keep its air */
+}
+.cols .clab{
+  flex:0 0 auto;font-size:10px;color:var(--faint);text-align:center;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+.cols .cval{flex:0 0 auto;font-size:10.5px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums;min-height:14px}
+
+/* donuts */
+.dnwrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.dnwrap svg{flex:0 0 auto}
+.leg{flex:1;min-width:150px;display:flex;flex-direction:column;gap:6px}
+.leg .li{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.leg .sw{width:9px;height:9px;border-radius:2px;flex:0 0 auto}
+.leg .ln{flex:1;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.leg .lv{font-variant-numeric:tabular-nums;font-weight:600}
+.leg .lp{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
+
+/* line chart */
+.chartbox{position:relative}
+.chartbox svg{display:block;width:100%;height:auto}
+.gridline{stroke:var(--line);stroke-width:1}
+.axlab{fill:var(--faint);font-size:10px}
+.hit{fill:transparent;cursor:crosshair}
+.hit:hover{fill:rgba(255,255,255,.04)}
+.legrow{display:flex;gap:14px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.legrow .li{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.legrow .sw{width:14px;height:3px;border-radius:2px}
+
+/* attention chips */
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:4px}
+.chip{
+  appearance:none;font:inherit;font-size:12px;cursor:pointer;
+  background:var(--surface-2);color:var(--muted);border:1px solid transparent;
+  border-radius:20px;padding:5px 12px;
+}
+.chip:hover{color:var(--text);background:#282E3A}
+.chip.hot{background:var(--red-soft);border-color:var(--red-line);color:var(--red);font-weight:600}
+.chip.hot:hover{background:rgba(255,107,94,.2)}
+.allclear{font-size:13px;color:var(--muted);padding:2px 0}
+
+/* data table */
+details.dt{margin:6px 0 0}
+details.dt summary{
+  font-size:12px;color:var(--faint);cursor:pointer;padding:8px 0;list-style:none;
+}
+details.dt summary::-webkit-details-marker{display:none}
+details.dt summary:hover{color:var(--text)}
+details.dt table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+details.dt th,details.dt td{
+  text-align:left;padding:6px 9px;border-bottom:1px solid var(--line-soft);
+  font-variant-numeric:tabular-nums;
+}
+details.dt th{color:var(--faint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+details.dt td{color:var(--muted)}
+.tscroll{overflow-x:auto}
+
+/* tooltip */
+#tip{
+  position:fixed;z-index:60;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:#0A0C10;border:1px solid var(--line);border-radius:7px;
+  padding:7px 10px;font-size:12px;color:var(--text);white-space:pre-line;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:230px;
+}
+#tip.on{opacity:1}
+
 /* script tab */
 .stage{background:var(--surface);border-radius:var(--radius);padding:15px 17px;margin-bottom:10px}
 .stage.done{background:transparent;box-shadow:inset 0 0 0 1px var(--line-soft);opacity:.62}
@@ -264,6 +389,15 @@ footer .hint{font-size:12px;color:var(--faint)}
   .acts button.mini{padding:6px 9px;flex:0 1 auto}
   .quote{flex-wrap:wrap}
   .quote p{flex:1 1 100%}
+  nav button{padding:9px 2px;font-size:12px}
+  .grid4{grid-template-columns:1fr 1fr}
+  .grid2{grid-template-columns:1fr}   /* two charts side by side overflow a phone */
+  .fnrow{grid-template-columns:92px 1fr auto;gap:8px}
+  .fnrow .fl{font-size:11.5px}
+  .fnrow .fv{min-width:50px;font-size:12px}
+  .card{padding:13px 14px}
+  .cols{height:104px}
+  .dnwrap{gap:12px}
 }
 </style>
 </head>
@@ -290,6 +424,7 @@ footer .hint{font-size:12px;color:var(--faint)}
   <div class="flash" id="flash"></div>
   <div id="view"></div>
 </main>
+<div id="tip" role="status" aria-live="polite"></div>
 
 <footer class="wrap">
   <button class="mini" id="exportBtn">Export JSON</button>
@@ -315,7 +450,10 @@ var CHASE1_AFTER = 1 * DAY;
 var CHASE2_AFTER = 3 * DAY;
 var PARK_FOR = 21 * DAY;
 var WEEKLY_TARGET = 25;
+var DAILY_TARGET = Math.round(WEEKLY_TARGET / 5);   // 25 a week over 5 working days
+var GOLDEN_DAILY_TARGET = 1;
 var TABS = [
+  {id:"stats",  label:"Statistics",         short:"Stats"},
   {id:"leads",  label:"Leads",              short:"Leads"},
   {id:"respond",label:"Leads That Respond", short:"Respond"},
   {id:"dead",   label:"Leads That Don't",   short:"Don't"},
@@ -324,7 +462,7 @@ var TABS = [
 
 /* ---------------- state ---------------- */
 var state = load();
-var ui = { tab:"leads", notesOpen:{}, parkedOpen:false, clientsOpen:true, q:"" };
+var ui = { tab:"leads", notesOpen:{}, parkedOpen:false, clientsOpen:true, q:"", range:30 };
 var lastOverdueSig = "";
 
 function load(){
@@ -416,7 +554,7 @@ function hl(handle){
   return esc(handle.slice(0, i)) + "<mark>" + esc(handle.slice(i, i + q.length)) + "</mark>" + esc(handle.slice(i + q.length));
 }
 function pad(n){ return n < 10 ? "0" + n : "" + n; }
-function plural(n, word){ return n + " " + word + (n === 1 ? "" : "s"); }
+function plural(n, word, many){ return n + " " + (n === 1 ? word : (many || word + "s")); }
 function fmtLeft(ms){
   if (ms < 0) ms = 0;
   var d = Math.floor(ms / DAY);
@@ -612,7 +750,7 @@ function counts(){
 function renderNav(){
   var c = counts();
   document.getElementById("nav").innerHTML = TABS.map(function(t){
-    var n = t.id === "script" ? "" : '<span class="n">' + c[t.id] + "</span>";
+    var n = (t.id === "script" || t.id === "stats") ? "" : '<span class="n">' + c[t.id] + "</span>";
     return '<button data-tab="' + t.id + '" class="' + (ui.tab === t.id ? "on" : "") + '">' +
       '<span class="full">' + esc(t.label) + '</span><span class="short">' + esc(t.short) + "</span>" + n + "</button>";
   }).join("");
@@ -621,7 +759,7 @@ function renderNav(){
 /* search bar lives in the static header, so typing never loses focus to a re-render */
 function renderSearch(){
   var bar = document.getElementById("searchBar");
-  var on = ui.tab !== "script";
+  var on = ui.tab !== "script" && ui.tab !== "stats";
   bar.className = "search" + (on ? " on" : "") + (ui.q ? " active" : "");
   if (!on) return;
   var hits = state.leads.filter(function(l){ return matchRank(l.handle, ui.q) > -1 && tabOf(l) === ui.tab; }).length;
@@ -637,7 +775,8 @@ function render(){
   renderNav();
   renderSearch();
   var v = document.getElementById("view");
-  if (ui.tab === "leads") v.innerHTML = viewLeads();
+  if (ui.tab === "stats") v.innerHTML = viewStats();
+  else if (ui.tab === "leads") v.innerHTML = viewLeads();
   else if (ui.tab === "respond") v.innerHTML = viewRespond();
   else if (ui.tab === "dead") v.innerHTML = viewDead();
   else v.innerHTML = viewScript();
@@ -682,7 +821,7 @@ function xtabHint(){
   if (!ui.q) return "";
   var c = {leads:0, respond:0, dead:0};
   state.leads.forEach(function(l){ if (matchRank(l.handle, ui.q) > -1) c[tabOf(l)]++; });
-  var others = TABS.filter(function(t){ return t.id !== "script" && t.id !== ui.tab && c[t.id] > 0; });
+  var others = TABS.filter(function(t){ return c[t.id] > 0 && t.id !== ui.tab; });
   if (!others.length) return "";
   return '<div class="xtab"><span>Also matching:</span>' + others.map(function(t){
     return '<button class="mini" data-tab="' + t.id + '">' + esc(t.label) + " (" + c[t.id] + ")</button>";
@@ -783,6 +922,305 @@ function viewDead(){
       '<div class="acts"><button class="mini" data-act="revive" data-id="' + l.id + '">Revive</button>' +
       rowDelete(l.id) + "</div></div>";
   }).join("") + "</section>" + xtabHint();
+}
+
+/* ---------------- statistics ---------------- */
+function startOfDay(ts){ var d = new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
+function fmtShort(ts){
+  var d = new Date(ts);
+  return d.getDate() + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+}
+
+function dailySeries(days){
+  var today = startOfDay(Date.now());
+  var out = [], idx = {};
+  for (var i = days - 1; i >= 0; i--){
+    var t = today - i * DAY;
+    idx[t] = out.length;
+    out.push({ t:t, opens:0, replies:0, chases:0 });
+  }
+  function bump(ts, field){
+    if (!ts) return;
+    var k = startOfDay(ts);
+    if (idx[k] != null) out[idx[k]][field]++;
+  }
+  state.leads.forEach(function(l){
+    bump(l.firstDmAt, "opens");
+    bump(l.repliedAt, "replies");
+    bump(l.followUp1SentAt, "chases");
+    bump(l.memeSentAt, "chases");
+  });
+  return out;
+}
+
+function funnelData(){
+  function n(fn){ return state.leads.filter(fn).length; }
+  return [
+    { label:"First DM sent",  n:state.leads.length, c:"var(--dim)" },
+    { label:"Replied",        n:n(function(l){ return l.repliedAt !== null; }), c:"var(--b1)" },
+    { label:"Golden Q asked", n:n(function(l){ return l.goldenQAt !== null; }), c:"var(--b2)" },
+    { label:"Call booked",    n:n(function(l){ return l.stage && STAGES.indexOf(l.stage) >= CALL_IDX; }), c:"var(--b3)" },
+    { label:"Signed client",  n:n(function(l){ return l.status === "client"; }), c:"var(--b4)" }
+  ];
+}
+
+function statusSplit(){
+  var m = { waiting:0, responded:0, parked:0, client:0, no_response:0 };
+  state.leads.forEach(function(l){ if (m[l.status] != null) m[l.status]++; });
+  return [
+    { label:"Waiting on reply", v:m.waiting,     c:"var(--dim)" },
+    { label:"In conversation",  v:m.responded,   c:"var(--b2)" },
+    { label:"Parked",           v:m.parked,      c:"var(--b1)" },
+    { label:"Clients",          v:m.client,      c:"var(--b4)" },
+    { label:"No reply",         v:m.no_response, c:"var(--r2)" }
+  ];
+}
+
+/* how punctual the day-3 and day-7 nudges actually were */
+function punctuality(){
+  var b = [0,0,0,0,0];
+  function add(diff){
+    if (diff <= 0) b[0]++;
+    else b[Math.min(Math.ceil(diff / DAY), 4)]++;
+  }
+  state.leads.forEach(function(l){
+    if (l.followUp1SentAt) add(l.followUp1SentAt - (l.firstDmAt + FOLLOWUP_AFTER));
+    if (l.memeSentAt) add(l.memeSentAt - (l.firstDmAt + MEME_AFTER));
+  });
+  return [
+    { label:"On time",      v:b[0], c:"var(--b2)" },
+    { label:"1 day late",   v:b[1], c:"var(--r4)" },
+    { label:"2 days late",  v:b[2], c:"var(--r3)" },
+    { label:"3 days late",  v:b[3], c:"var(--r2)" },
+    { label:"4+ days late", v:b[4], c:"var(--r1)" }
+  ];
+}
+
+var STAGE_SHORT = ["Ctrl","Goal","Pain","Mirror","Golden","Ties","Call","Client"];
+function stageCounts(){
+  return STAGES.map(function(s, i){
+    return { label:s, short:STAGE_SHORT[i], v:state.leads.filter(function(l){
+      return l.stage === s && l.status !== "no_response" && l.status !== "waiting";
+    }).length };
+  });
+}
+
+function weekdayCounts(days){
+  var names = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], c = [0,0,0,0,0,0,0];
+  var since = startOfDay(Date.now()) - (days - 1) * DAY;
+  state.leads.forEach(function(l){
+    if (l.firstDmAt < since) return;
+    c[(new Date(l.firstDmAt).getDay() + 6) % 7]++;
+  });
+  return names.map(function(nm, i){ return { label:nm, v:c[i] }; });
+}
+
+/* what needs doing right now, across every tab */
+function attention(){
+  var now = Date.now(), a = { followup:0, meme:0, archive:0, quiet:0, resurface:0 };
+  state.leads.forEach(function(l){
+    if (l.status === "waiting"){
+      var p = phaseOf(l);
+      if (p.kind === "final") a.archive++;
+      else if (p.target <= now){ if (p.kind === "meme") a.meme++; else a.followup++; }
+    } else if (l.status === "responded"){
+      if (chaseText(l, now).due) a.quiet++;
+    } else if (l.status === "parked"){
+      if (l.parkedUntil && l.parkedUntil <= now) a.resurface++;
+    }
+  });
+  return a;
+}
+
+/* ---- chart builders ---- */
+function meter(label, done, target){
+  var pct = target > 0 ? Math.min(100, Math.round(done / target * 100)) : (done > 0 ? 100 : 0);
+  var cls = (target > 0 && done >= target) ? " done" : (done === 0 ? " zero" : "");
+  return '<div class="meter"><div class="top"><span class="lbl">' + esc(label) + "</span>" +
+    '<span class="val">' + done + "<i> / " + target + "</i></span></div>" +
+    '<div class="mtrack"><div class="mfill' + cls + '" style="width:' + pct + '%"></div></div></div>';
+}
+
+function funnelChart(){
+  var d = funnelData(), top = Math.max(1, d[0].n);
+  return '<div class="fn">' + d.map(function(row, i){
+    var w = Math.round(row.n / top * 100);
+    var conv = i === 0 ? "" :
+      '<span> ' + (d[i-1].n ? Math.round(row.n / d[i-1].n * 100) : 0) + "%</span>";
+    var tip = row.label + ": " + row.n + " of " + top + " leads (" + w + "%)" +
+      (i === 0 ? "" : "\n" + (d[i-1].n ? Math.round(row.n / d[i-1].n * 100) : 0) + "% of " + d[i-1].label.toLowerCase());
+    return '<div class="fnrow"><span class="fl">' + esc(row.label) + "</span>" +
+      '<div class="ftrack"><div class="ffill" style="width:' + w + "%;background:" + row.c + '" data-tip="' + esc(tip) + '"></div></div>' +
+      '<span class="fv">' + row.n + conv + "</span></div>";
+  }).join("") + "</div>";
+}
+
+function donut(segs){
+  var total = 0;
+  segs.forEach(function(s){ total += s.v; });
+  var size = 132, sw = 15, r = (size - sw) / 2, c = 2 * Math.PI * r, mid = size / 2;
+  var svg = '<svg viewBox="0 0 ' + size + " " + size + '" width="' + size + '" height="' + size + '" role="img">';
+  if (!total){
+    svg += '<circle cx="' + mid + '" cy="' + mid + '" r="' + r + '" fill="none" stroke="var(--track)" stroke-width="' + sw + '"/>';
+  } else {
+    var off = 0;
+    segs.forEach(function(s){
+      if (!s.v) return;
+      var len = s.v / total * c;
+      var draw = Math.max(1, len - 2);   /* 2px surface gap between segments */
+      svg += '<circle cx="' + mid + '" cy="' + mid + '" r="' + r + '" fill="none" stroke="' + s.c +
+        '" stroke-width="' + sw + '" stroke-dasharray="' + draw.toFixed(2) + " " + (c - draw).toFixed(2) +
+        '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 ' + mid + " " + mid + ')"' +
+        ' data-tip="' + esc(s.label + ": " + s.v + " (" + Math.round(s.v / total * 100) + "%)") + '"/>';
+      off += len;
+    });
+  }
+  svg += '<text x="' + mid + '" y="' + (mid - 1) + '" text-anchor="middle" fill="#E9ECF2" font-size="23" font-weight="650">' + total + "</text>" +
+    '<text x="' + mid + '" y="' + (mid + 16) + '" text-anchor="middle" fill="#757F90" font-size="10">total</text></svg>';
+  var leg = '<div class="leg">' + segs.map(function(s){
+    return '<div class="li"><span class="sw" style="background:' + s.c + '"></span>' +
+      '<span class="ln">' + esc(s.label) + '</span><span class="lv">' + s.v + "</span>" +
+      '<span class="lp">' + (total ? Math.round(s.v / total * 100) : 0) + "%</span></div>";
+  }).join("") + "</div>";
+  return '<div class="dnwrap">' + svg + leg + "</div>";
+}
+
+function columns(items, unit){
+  var max = 1;
+  items.forEach(function(i){ if (i.v > max) max = i.v; });
+  return '<div class="cols">' + items.map(function(i){
+    return '<div class="col" data-tip="' + esc(i.label + ": " + i.v + " " + unit) + '">' +
+      '<span class="cval">' + (i.v || "") + "</span>" +
+      '<div class="cplot"><div class="cbar" style="height:' + Math.round(i.v / max * 100) + '%"></div></div>' +
+      '<span class="clab">' + esc(i.short || i.label) + "</span></div>";
+  }).join("") + "</div>";
+}
+
+/* emphasis form: volume is context in grey, replies are the point in accent blue */
+function activityChart(series){
+  var W = 720, H = 200, pl = 28, pr = 6, pt = 10, pb = 26;
+  var peak = 1;
+  series.forEach(function(d){
+    if (d.opens > peak) peak = d.opens;
+    if (d.replies > peak) peak = d.replies;
+  });
+  var step = Math.max(1, Math.ceil(peak / 4)), max = step * 4, n = series.length;
+  function X(i){ return n < 2 ? pl : pl + i * (W - pl - pr) / (n - 1); }
+  function Y(v){ return pt + (1 - v / max) * (H - pt - pb); }
+
+  var svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Outreach activity over time">';
+  for (var g = 0; g <= max; g += step){
+    svg += '<line class="gridline" x1="' + pl + '" y1="' + Y(g) + '" x2="' + (W - pr) + '" y2="' + Y(g) + '"/>' +
+      '<text class="axlab" x="' + (pl - 6) + '" y="' + (Y(g) + 3.5) + '" text-anchor="end">' + g + "</text>";
+  }
+  var i, area = "M" + X(0).toFixed(1) + " " + Y(series[0].opens).toFixed(1);
+  for (i = 1; i < n; i++) area += " L" + X(i).toFixed(1) + " " + Y(series[i].opens).toFixed(1);
+  area += " L" + X(n-1).toFixed(1) + " " + Y(0) + " L" + X(0).toFixed(1) + " " + Y(0) + " Z";
+  svg += '<path d="' + area + '" fill="rgba(101,111,127,.22)"/>';
+  var lineO = "M" + X(0).toFixed(1) + " " + Y(series[0].opens).toFixed(1);
+  for (i = 1; i < n; i++) lineO += " L" + X(i).toFixed(1) + " " + Y(series[i].opens).toFixed(1);
+  svg += '<path d="' + lineO + '" fill="none" stroke="#656F7F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+  var lineR = "M" + X(0).toFixed(1) + " " + Y(series[0].replies).toFixed(1);
+  for (i = 1; i < n; i++) lineR += " L" + X(i).toFixed(1) + " " + Y(series[i].replies).toFixed(1);
+  svg += '<path d="' + lineR + '" fill="none" stroke="#2F6DFF" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+
+  var every = Math.max(1, Math.ceil(n / 6));
+  for (i = 0; i < n; i += every){
+    svg += '<text class="axlab" x="' + X(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + fmtShort(series[i].t) + "</text>";
+  }
+  var bw = (W - pl - pr) / n;
+  for (i = 0; i < n; i++){
+    var d = series[i];
+    svg += '<rect class="hit" x="' + (X(i) - bw/2).toFixed(1) + '" y="' + pt + '" width="' + bw.toFixed(1) +
+      '" height="' + (H - pt - pb) + '" data-tip="' + esc(fmtShort(d.t) + "\n" +
+      plural(d.opens, "first DM") + " sent\n" + plural(d.replies, "reply", "replies") + "\n" +
+      plural(d.chases, "chase") + " sent") + '"/>';
+  }
+  return svg + "</svg>";
+}
+
+function viewStats(){
+  if (!state.leads.length){
+    return '<div class="empty">Nothing to chart yet. Log your first DM in the bar above and this fills in.</div>';
+  }
+  var days = ui.range, series = dailySeries(days), today = series[series.length - 1];
+  var f = funnelData(), a = attention(), wk = mondayStart();
+  var goldenToday = state.leads.filter(function(l){ return l.goldenQAt && l.goldenQAt >= startOfDay(Date.now()); }).length;
+  var chasesDue = a.followup + a.meme, chasesDone = today.chases;
+  var rangeTotals = series.reduce(function(m, d){
+    m.opens += d.opens; m.replies += d.replies; m.chases += d.chases; return m;
+  }, { opens:0, replies:0, chases:0 });
+
+  var html = '<div class="srow"><div class="seg">' + [7,30,90].map(function(d){
+    return '<button data-range="' + d + '" class="' + (days === d ? "on" : "") + '">' + d + " days</button>";
+  }).join("") + "</div><span class=\"sp\"></span></div>";
+
+  /* today */
+  html += '<div class="grid2">' +
+    '<div class="card"><h4>Today</h4><div class="csub">' + fmtDate(Date.now()) + "</div>" +
+      meter("First DMs sent", today.opens, DAILY_TARGET) +
+      meter("Chases cleared", chasesDone, Math.max(chasesDone + chasesDue, 1)) +
+      meter("Golden Qs asked", goldenToday, GOLDEN_DAILY_TARGET) +
+    "</div>" +
+    '<div class="card"><h4>Needs you now</h4><div class="csub">Click through to the tab</div>';
+  var chips = [];
+  if (a.followup) chips.push('<button class="chip hot" data-tab="leads">' + plural(a.followup, "follow-up") + " due</button>");
+  if (a.meme) chips.push('<button class="chip hot" data-tab="leads">' + plural(a.meme, "meme") + " due</button>");
+  if (a.quiet) chips.push('<button class="chip hot" data-tab="respond">' + plural(a.quiet, "conversation") + " gone quiet</button>");
+  if (a.resurface) chips.push('<button class="chip hot" data-tab="respond">' + plural(a.resurface, "lead") + " to resurface</button>");
+  if (a.archive) chips.push('<button class="chip" data-tab="leads">' + plural(a.archive, "lead") + " to archive</button>");
+  html += chips.length ? '<div class="chips">' + chips.join("") + "</div>"
+                       : '<div class="allclear">All clear. Nothing overdue right now.</div>';
+  html += "</div></div>";
+
+  /* activity */
+  html += '<div class="card"><h4>Outreach activity</h4><div class="csub">Last ' + days + " days: " +
+    rangeTotals.opens + " first DMs, " + rangeTotals.replies + " replies, " + rangeTotals.chases + " chases</div>" +
+    '<div class="legrow">' +
+      '<span class="li"><span class="sw" style="background:#656F7F"></span>First DMs sent</span>' +
+      '<span class="li"><span class="sw" style="background:#2F6DFF"></span>Replies received</span>' +
+    "</div>" +
+    '<div class="chartbox">' + activityChart(series) + "</div>" +
+    '<details class="dt"><summary>Show the numbers</summary><div class="tscroll"><table>' +
+      "<tr><th>Day</th><th>First DMs</th><th>Replies</th><th>Chases</th></tr>" +
+      series.slice().reverse().filter(function(d){ return d.opens || d.replies || d.chases; }).map(function(d){
+        return "<tr><td>" + fmtShort(d.t) + "</td><td>" + d.opens + "</td><td>" + d.replies + "</td><td>" + d.chases + "</td></tr>";
+      }).join("") +
+    "</table></div></details></div>";
+
+  /* conversion rates */
+  function rate(n, of){ return of ? Math.round(n / of * 100) : 0; }
+  html += '<div class="grid4">' +
+    tile("Reply rate", rate(f[1].n, f[0].n) + "%", f[1].n + " of " + f[0].n + " opened") +
+    tile("Golden Q rate", rate(f[2].n, f[1].n) + "%", f[2].n + " of " + f[1].n + " replies") +
+    tile("Call rate", rate(f[3].n, f[2].n) + "%", f[3].n + " of " + f[2].n + " Golden Qs") +
+    tile("Close rate", rate(f[4].n, f[3].n) + "%", f[4].n + " of " + f[3].n + " calls") +
+  "</div>";
+
+  /* funnel */
+  html += '<div class="card"><h4>Pipeline funnel</h4><div class="csub">All leads ever. The small number is the step conversion.</div>' +
+    funnelChart() + "</div>";
+
+  /* two donuts */
+  html += '<div class="grid2">' +
+    '<div class="card"><h4>Where everyone sits</h4><div class="csub">Current pipeline split</div>' + donut(statusSplit()) + "</div>" +
+    '<div class="card"><h4>Chase punctuality</h4><div class="csub">Day 3 and day 7 nudges, against when they were due</div>' + donut(punctuality()) + "</div>" +
+  "</div>";
+
+  /* stage + weekday */
+  html += '<div class="grid2">' +
+    '<div class="card"><h4>Live conversations by stage</h4><div class="csub">Everyone still in play</div>' +
+      columns(stageCounts(), "leads") + "</div>" +
+    '<div class="card"><h4>Which days you actually open</h4><div class="csub">First DMs by weekday, last ' + days + " days</div>" +
+      columns(weekdayCounts(days), "first DMs") + "</div>" +
+  "</div>";
+
+  return html;
+}
+
+function tile(k, big, sub){
+  return '<div class="card tile"><h4>' + esc(k) + '</h4><div class="big">' + big + "</div>" +
+    '<div class="sub">' + esc(sub) + "</div></div>";
 }
 
 /* ---------------- script ---------------- */
@@ -894,6 +1332,9 @@ document.addEventListener("click", function(e){
   var sec = t.closest("[data-toggle]");
   if (sec){ ui.parkedOpen = !ui.parkedOpen; render(); return; }
 
+  var rng = t.closest("[data-range]");
+  if (rng){ ui.range = parseInt(rng.getAttribute("data-range"), 10) || 30; render(); return; }
+
   var tab = t.closest("[data-tab]");
   if (tab){ ui.tab = tab.getAttribute("data-tab"); clearFlash(); render(); return; }
 
@@ -961,6 +1402,24 @@ function legacyCopy(text, done){
   try { document.execCommand("copy"); done(); } catch(e){ flash("Copy failed, select the text manually.", false); }
   document.body.removeChild(ta);
 }
+
+/* ---------------- chart tooltips ---------------- */
+var tipEl = document.getElementById("tip");
+document.addEventListener("mousemove", function(e){
+  var host = e.target && e.target.closest ? e.target.closest("[data-tip]") : null;
+  if (!host){ if (tipEl.className) tipEl.className = ""; return; }
+  var txt = host.getAttribute("data-tip");
+  if (tipEl.textContent !== txt) tipEl.textContent = txt;
+  tipEl.className = "on";
+  var r = tipEl.getBoundingClientRect(), pad = 14;
+  var x = e.clientX + pad, y = e.clientY + pad;
+  if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+  tipEl.style.left = Math.max(8, x) + "px";
+  tipEl.style.top = Math.max(8, y) + "px";
+});
+document.addEventListener("mouseleave", function(){ tipEl.className = ""; });
+window.addEventListener("scroll", function(){ tipEl.className = ""; }, true);
 
 /* ---------------- export / import ---------------- */
 document.getElementById("exportBtn").addEventListener("click", function(){
