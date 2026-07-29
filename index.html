@@ -193,6 +193,41 @@ section{padding:14px 0 4px;display:flex;flex-direction:column;gap:6px}
 .acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .meta{font-size:12px;color:var(--faint);white-space:nowrap}
 .row.due .meta{color:rgba(255,150,140,.72)}
+/* ---------- follow-up board (Leads tab) ---------- */
+/* minmax(0,1fr), not 1fr: long overdue pills otherwise stretch one column and squeeze the rest */
+.board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:start}
+.bhead{background:var(--surface);border-radius:var(--radius);padding:11px 13px;margin-bottom:8px}
+.bhead .bt{display:flex;align-items:center;gap:8px}
+.bhead h3{font-size:13px;font-weight:650;letter-spacing:-.01em;flex:1}
+.bhead .bn{
+  font-size:11px;color:var(--faint);background:var(--surface-2);
+  border-radius:20px;padding:1px 7px;font-variant-numeric:tabular-nums;
+}
+.bhead.hot .bn{background:var(--red-soft);color:var(--red);font-weight:600}
+.bhead .brule{font-size:11.5px;color:var(--faint);margin-top:3px}
+.bcards{display:flex;flex-direction:column;gap:7px}
+.lcard{
+  background:var(--surface);border-radius:var(--radius);padding:11px 12px;
+  border-left:2px solid transparent;transition:background .12s;
+}
+.lcard:hover{background:var(--surface-2)}
+.lcard.due{background:var(--red-soft);border-left-color:var(--red)}
+.lcard.due:hover{background:rgba(255,107,94,.18)}
+.ltop{display:flex;align-items:center;gap:9px}
+.ltop .handle{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ltop .pill{flex:0 0 auto}
+.lmeta{font-size:11.5px;color:var(--faint);margin-top:5px}
+.lcard.due .lmeta{color:rgba(255,150,140,.7)}
+.lcard .acts{margin-top:9px}
+.pill{
+  font-size:11px;padding:3px 9px;border-radius:20px;background:var(--surface-2);
+  color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums;
+  border:1px solid transparent;
+}
+.pill.due{background:rgba(0,0,0,.24);color:var(--red);font-weight:650;border-color:var(--red-line)}
+.pill.final{background:var(--surface-2);color:var(--faint);font-style:italic}
+.bempty{font-size:12px;color:var(--faint);padding:14px 4px;text-align:center}
+
 /* progress meter: one pip per checkpoint up to Call Booked */
 .prog{flex:1 1 100%;display:flex;align-items:center;gap:10px;margin-top:3px}
 .pips{display:flex;gap:3px;flex:0 1 210px;min-width:90px}
@@ -381,6 +416,8 @@ footer .hint{font-size:12px;color:var(--faint)}
   nav button .full{display:none}
   nav button .short{display:inline}
   nav button .n{margin-left:4px;padding:1px 5px}
+  .board{grid-template-columns:1fr;gap:6px}
+  .bhead{margin-bottom:6px}
   .row{padding:11px 12px;gap:9px}
   .acts{width:100%;gap:5px}
   .rowmain{flex:1 1 100%}
@@ -607,10 +644,14 @@ function phaseOf(l){
 }
 function cdText(l, now){
   var p = phaseOf(l);
-  if (p.kind === "final") return { text:"No reply, final", due:false, final:true };
+  // the board column names the message, so the pill only carries the timing
+  if (p.kind === "final") return { text:"no reply, final", due:false, final:true };
   var left = p.target - now;
-  if (left <= 0) return { text: p.kind === "meme" ? "MEME DUE" : "FOLLOW UP DUE", due:true, final:false };
-  return { text: (p.kind === "meme" ? "Meme in " : "Follow up in ") + fmtLeft(left), due:false, final:false };
+  if (left <= 0){
+    var over = Math.floor(-left / DAY);
+    return { text: over >= 1 ? plural(over, "day") + " overdue" : "due now", due:true, final:false };
+  }
+  return { text: "in " + fmtLeft(left), due:false, final:false };
 }
 function sortKey(l, now){
   var p = phaseOf(l);
@@ -789,26 +830,54 @@ function rowDelete(id){ return '<button class="x" data-act="delete" data-id="' +
 
 function viewLeads(){
   var now = Date.now();
-  var list = filterList(state.leads.filter(function(l){ return l.status === "waiting"; })
-    .sort(function(a,b){ return sortKey(a,now) - sortKey(b,now); }), ui.q);
-  if (!list.length) return noMatch('No open leads. Add a handle above the moment you send a first DM.');
+  var waiting = state.leads.filter(function(l){ return l.status === "waiting"; });
+  if (!waiting.length) return noMatch("No open leads. Add a handle above the moment you send a first DM.");
 
-  return "<section>" + list.map(function(l){
-    var c = cdText(l, now);
-    var p = phaseOf(l);
-    var acts = "";
-    // progression first and lit, the chase action second and red
-    acts += '<button class="mini go" data-act="replied" data-id="' + l.id + '" title="They replied. Moves them into the conversation pipeline">Replied</button>';
-    if (p.kind === "followup") acts += '<button class="mini chase" data-act="followup" data-id="' + l.id + '">Follow-up sent</button>';
-    else if (p.kind === "meme") acts += '<button class="mini chase" data-act="meme" data-id="' + l.id + '">Meme sent</button>';
-    else acts += '<button class="mini" data-act="archive" data-id="' + l.id + '">Archive</button>';
-    acts += rowDelete(l.id);
+  // one column per message they are waiting on
+  var cols = [
+    { kind:"followup", title:"1st follow-up", rule:"Day 3 after the first DM" },
+    { kind:"meme",     title:"2nd follow-up", rule:"Day 7, the meme nudge" },
+    { kind:"final",    title:"No reply",      rule:"Both nudges sent, ready to archive" }
+  ];
+  var shown = 0;
+  cols.forEach(function(c){
+    c.leads = filterList(waiting.filter(function(l){ return phaseOf(l).kind === c.kind; })
+      .sort(function(a, b){ return sortKey(a, now) - sortKey(b, now); }), ui.q);   // overdue first
+    c.overdue = c.leads.filter(function(l){ return cdText(l, now).due; }).length;
+    shown += c.leads.length;
+  });
+  if (!shown) return noMatch("No open leads.");
 
-    return '<div class="row' + (c.due ? " due" : "") + '" data-row="' + l.id + '">' +
-      '<div class="rowmain"><span class="handle">@' + hl(l.handle) + "</span>" +
-      '<span class="cd' + (c.due ? " due" : "") + (c.final ? " final" : "") + '" data-cd="' + l.id + '">' + c.text + "</span></div>" +
-      '<div class="acts">' + acts + "</div></div>";
-  }).join("") + "</section>" + xtabHint();
+  return '<div class="board">' + cols.map(function(c){
+    return '<div class="bcol">' +
+      '<div class="bhead' + (c.overdue ? " hot" : "") + '"><div class="bt"><h3>' + esc(c.title) + "</h3>" +
+        '<span class="bn">' + (c.overdue ? c.overdue + " due" : c.leads.length) + "</span></div>" +
+        '<div class="brule">' + esc(c.rule) + "</div></div>" +
+      '<div class="bcards">' + (c.leads.length ? c.leads.map(leadCard).join("")
+        : '<div class="bempty">Nothing here</div>') + "</div></div>";
+  }).join("") + "</div>" + xtabHint();
+}
+
+function leadCard(l){
+  var c = cdText(l, Date.now()), p = phaseOf(l);
+  var acts = '<button class="mini go" data-act="replied" data-id="' + l.id +
+    '" title="They replied. Moves them into the conversation pipeline">Replied</button>';
+  var when;
+  if (p.kind === "followup"){
+    acts += '<button class="mini chase" data-act="followup" data-id="' + l.id + '">Follow-up sent</button>';
+    when = "First DM " + fmtShort(l.firstDmAt);
+  } else if (p.kind === "meme"){
+    acts += '<button class="mini chase" data-act="meme" data-id="' + l.id + '">Meme sent</button>';
+    when = "Follow-up " + fmtShort(l.followUp1SentAt);
+  } else {
+    acts += '<button class="mini" data-act="archive" data-id="' + l.id + '">Archive</button>';
+    when = "Meme " + fmtShort(l.memeSentAt);
+  }
+  return '<div class="lcard' + (c.due ? " due" : "") + '" data-row="' + l.id + '">' +
+    '<div class="ltop"><span class="handle">@' + hl(l.handle) + "</span>" +
+      '<span class="cd pill' + (c.due ? " due" : "") + (c.final ? " final" : "") + '" data-cd="' + l.id + '">' + c.text + "</span></div>" +
+    '<div class="lmeta">' + when + "</div>" +
+    '<div class="acts">' + acts + rowDelete(l.id) + "</div></div>";
 }
 
 /* empty state: plain message normally, match-aware while searching */
@@ -1493,9 +1562,11 @@ function tick(){
       text = c.text; due = c.due; final = c.final;
     }
     if (el.textContent !== text) el.textContent = text;
-    el.className = "cd" + (due ? " due" : "") + (final ? " final" : "");
+    // toggle, never reassign: these elements also carry pill / lcard / row classes
+    el.classList.toggle("due", due);
+    el.classList.toggle("final", final);
     var row = el.closest("[data-row]");
-    if (row) row.className = "row" + (due ? " due" : "");
+    if (row) row.classList.toggle("due", due);
   }
   // re-sort / re-group when something crosses zero, unless the user is typing
   var sig = overdueSig();
