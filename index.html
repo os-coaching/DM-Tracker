@@ -176,6 +176,16 @@ section{padding:14px 0 4px;display:flex;flex-direction:column;gap:6px}
 .acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .meta{font-size:12px;color:var(--faint);white-space:nowrap}
 .row.due .meta{color:rgba(255,150,140,.72)}
+/* progress meter: one pip per checkpoint up to Call Booked */
+.prog{flex:1 1 100%;display:flex;align-items:center;gap:10px;margin-top:3px}
+.pips{display:flex;gap:3px;flex:0 1 210px;min-width:90px}
+.pips i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.pips i.on{background:var(--accent-text)}
+.prog .pct{font-size:11.5px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+.prog.full .pct{color:var(--accent-text);font-weight:600}
+.row.due .pips i{background:rgba(255,255,255,.13)}
+.row.due .pips i.on{background:#9CBEFF}
+
 /* inline notes preview, truncates to whatever width is left */
 .npv{
   flex:1 1 0;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -362,6 +372,24 @@ function filterList(list, q){
   return list.filter(function(l){ return matchRank(l.handle, q) > -1; })
              .sort(function(a,b){ return matchRank(a.handle, q) - matchRank(b.handle, q); });
 }
+/* progress toward offering the call: Control Q .. Call Booked = 7 checkpoints */
+function progressOf(l){
+  var idx = STAGES.indexOf(l.stage);
+  if (idx < 0) idx = 0;
+  var total = CALL_IDX + 1;
+  var done = Math.min(idx, CALL_IDX) + 1;
+  return { done: done, total: total, pct: Math.round(done / total * 100) };
+}
+function progressBar(l){
+  var p = progressOf(l);
+  var pips = "";
+  for (var i = 0; i < p.total; i++) pips += "<i" + (i < p.done ? ' class="on"' : "") + "></i>";
+  return '<div class="prog' + (p.pct === 100 ? " full" : "") + '" title="' + p.done + " of " + p.total +
+    ' checkpoints cleared on the way to offering the call">' +
+    '<span class="pips">' + pips + "</span>" +
+    '<span class="pct">' + (p.pct === 100 ? "call reached" : p.pct + "% to call") + "</span></div>";
+}
+
 /* one-line notes preview beside the handle; click opens the full editor */
 function notesPreview(l){
   var n = (l.notes || "").replace(/\s+/g, " ").trim();
@@ -701,11 +729,12 @@ function convoRow(l){
     '<select class="stage' + (idx >= GOLDEN_IDX ? " gold" : "") + '" data-stage="' + l.id + '">' + opts + "</select>" +
     '<button class="mini" data-toggle-notes="' + l.id + '">' + (open ? "Hide notes" : (hasNotes ? "Edit notes" : "Notes")) + "</button>";
   if (l.status !== "client"){
-    html += '<button class="mini" data-act="recontact" data-id="' + l.id + '" title="They replied / you messaged — restart the chase clock">Replied</button>' +
+    html += '<button class="mini" data-act="recontact" data-id="' + l.id + '" title="They replied, or you messaged. Restarts the chase clock">Replied</button>' +
             '<button class="mini" data-act="park" data-id="' + l.id + '">Park</button>' +
             '<button class="mini danger" data-act="dead" data-id="' + l.id + '">Dead</button>';
   }
   html += rowDelete(l.id) + "</div>";
+  html += progressBar(l);
   if (open){
     html += '<div class="notes"><textarea data-notes="' + l.id + '" placeholder="their goal + pain in their exact words (for the mirror message)"></textarea></div>';
   }
@@ -726,6 +755,7 @@ function parkedRow(l){
       '<button class="mini danger" data-act="dead" data-id="' + l.id + '">Dead</button>' +
       rowDelete(l.id) +
     "</div>" +
+    progressBar(l) +
     (ui.notesOpen[l.id] ? '<div class="notes"><textarea data-notes="' + l.id + '" placeholder="their goal + pain in their exact words (for the mirror message)"></textarea></div>' : "") +
     "</div>";
 }
