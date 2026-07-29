@@ -130,6 +130,17 @@ button.mini.primary{background:var(--accent);color:#fff;font-weight:600}
 button.mini.primary:hover{background:var(--accent);filter:brightness(1.12)}
 button.mini.danger{color:var(--muted);background:transparent;border-color:var(--line)}
 button.mini.danger:hover{background:var(--red-soft);color:var(--red);border-color:var(--red-line)}
+/* progression action: the only lit button on a waiting row */
+button.mini.go{
+  background:var(--accent);border-color:var(--accent);color:#fff;
+  font-weight:650;font-size:13px;padding:8px 16px;
+}
+button.mini.go:hover{background:var(--accent);filter:brightness(1.14)}
+/* chase actions: red, deliberately not lit, this is not progress */
+button.mini.chase{background:transparent;border-color:var(--red-line);color:var(--red)}
+button.mini.chase:hover{background:var(--red-soft);color:var(--red);border-color:var(--red)}
+.row.due button.mini.chase{background:rgba(0,0,0,.26);border-color:var(--red)}
+.row.due button.mini.chase:hover{background:rgba(0,0,0,.4)}
 button.x{
   appearance:none;border:none;background:none;font:inherit;font-size:16px;line-height:1;
   color:var(--faint);cursor:pointer;padding:5px 7px;border-radius:6px;transition:color .12s,background .12s;
@@ -647,10 +658,11 @@ function viewLeads(){
     var c = cdText(l, now);
     var p = phaseOf(l);
     var acts = "";
-    if (p.kind === "followup") acts += '<button class="mini primary" data-act="followup" data-id="' + l.id + '">Follow-up sent</button>';
-    else if (p.kind === "meme") acts += '<button class="mini primary" data-act="meme" data-id="' + l.id + '">Meme sent</button>';
+    // progression first and lit, the chase action second and red
+    acts += '<button class="mini go" data-act="replied" data-id="' + l.id + '" title="They replied. Moves them into the conversation pipeline">Replied</button>';
+    if (p.kind === "followup") acts += '<button class="mini chase" data-act="followup" data-id="' + l.id + '">Follow-up sent</button>';
+    else if (p.kind === "meme") acts += '<button class="mini chase" data-act="meme" data-id="' + l.id + '">Meme sent</button>';
     else acts += '<button class="mini" data-act="archive" data-id="' + l.id + '">Archive</button>';
-    acts += '<button class="mini" data-act="replied" data-id="' + l.id + '">Replied</button>';
     acts += rowDelete(l.id);
 
     return '<div class="row' + (c.due ? " due" : "") + '" data-row="' + l.id + '">' +
