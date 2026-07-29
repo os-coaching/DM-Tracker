@@ -229,6 +229,8 @@ var CALL_IDX = 6;
 var DAY = 86400000;
 var FOLLOWUP_AFTER = 3 * DAY;
 var MEME_AFTER = 7 * DAY;
+var CHASE1_AFTER = 1 * DAY;
+var CHASE2_AFTER = 3 * DAY;
 var PARK_FOR = 21 * DAY;
 var WEEKLY_TARGET = 25;
 var TABS = [
@@ -262,6 +264,7 @@ function normalise(l){
     followUp1SentAt: num(l.followUp1SentAt, null),
     memeSentAt: num(l.memeSentAt, null),
     repliedAt: num(l.repliedAt, null),
+    lastReplyAt: num(l.lastReplyAt, num(l.repliedAt, num(l.createdAt, num(l.firstDmAt, Date.now())))),
     status: ["waiting","responded","no_response","parked","client"].indexOf(l.status) > -1 ? l.status : "waiting",
     stage: STAGES.indexOf(l.stage) > -1 ? l.stage : null,
     goldenQAt: num(l.goldenQAt, null),
@@ -349,6 +352,15 @@ function sortKey(l, now){
   return p.target - now;
 }
 
+/* chase-up model for a lead in conversation (tab 2) */
+function chaseAnchor(l){ return l.lastReplyAt || l.repliedAt || l.createdAt || Date.now(); }
+function chaseText(l, now){
+  var a = chaseAnchor(l);
+  if (now < a + CHASE1_AFTER) return { text:"Chase in " + fmtLeft(a + CHASE1_AFTER - now), due:false, level:0 };
+  if (now < a + CHASE2_AFTER) return { text:"CHASE · quiet 1d", due:true, level:1 };
+  return { text:"CHASE · quiet 3d", due:true, level:2 };
+}
+
 /* ---------------- flash ---------------- */
 var flashTimer = null;
 function flash(msg, ok){
@@ -394,10 +406,11 @@ function act(id, what){
   if (what === "followup"){ l.followUp1SentAt = now; }
   else if (what === "meme"){ l.memeSentAt = now; if (!l.followUp1SentAt) l.followUp1SentAt = now; }
   else if (what === "replied"){
-    l.repliedAt = now; l.status = "responded"; l.stage = "Control Q";
+    l.repliedAt = now; l.lastReplyAt = now; l.status = "responded"; l.stage = "Control Q";
     l.parkedUntil = null; l.archivedAt = null;
     ui.tab = "respond";
   }
+  else if (what === "recontact"){ l.lastReplyAt = now; }
   else if (what === "archive" || what === "dead"){
     l.status = "no_response"; l.archivedAt = now; l.parkedUntil = null;
   }
@@ -405,10 +418,11 @@ function act(id, what){
     l.status = "parked"; l.parkedUntil = now + PARK_FOR; ui.parkedOpen = true;
   }
   else if (what === "unpark"){
-    l.status = "responded"; l.parkedUntil = null;
+    l.status = "responded"; l.parkedUntil = null; l.lastReplyAt = now;
   }
   else if (what === "revive"){
     l.status = "responded"; l.stage = "Control Q"; l.archivedAt = null; l.parkedUntil = null;
+    l.lastReplyAt = now;
     if (!l.repliedAt) l.repliedAt = now;
     ui.tab = "respond";
   }
@@ -426,6 +440,7 @@ function setStage(id, stage){
   var idx = STAGES.indexOf(stage);
   if (idx < 0) return;
   l.stage = stage;
+  l.lastReplyAt = Date.now();   // stage moved = live activity, restart the chase clock
   if (idx >= GOLDEN_IDX && !l.goldenQAt) l.goldenQAt = Date.now();
   if (stage === "Client"){ l.status = "client"; l.parkedUntil = null; }
   else if (l.status === "client"){ l.status = "responded"; }
@@ -514,7 +529,7 @@ function viewLeads(){
 
 function viewRespond(){
   var active = state.leads.filter(function(l){ return l.status === "responded"; })
-    .sort(function(a,b){ return (b.repliedAt || b.createdAt) - (a.repliedAt || a.createdAt); });
+    .sort(function(a,b){ return chaseAnchor(a) - chaseAnchor(b); });   // stalest conversation first
   var parked = state.leads.filter(function(l){ return l.status === "parked"; })
     .sort(function(a,b){ return (a.parkedUntil || 0) - (b.parkedUntil || 0); });
   var clients = state.leads.filter(function(l){ return l.status === "client"; })
@@ -552,13 +567,18 @@ function convoRow(l){
 
   var html = '<div class="row" data-row="' + l.id + '">' +
     '<div class="rowmain"><span class="handle">@' + esc(l.handle) + "</span>";
+  if (l.status === "responded"){
+    var c = chaseText(l, Date.now());
+    html += '<span class="cd' + (c.due ? " due" : "") + '" data-cd="' + l.id + '">' + c.text + "</span>";
+  }
   if (l.goldenQAt) html += '<span class="meta">Golden Q ' + fmtDate(l.goldenQAt) + "</span>";
   html += "</div>" +
     '<div class="acts">' +
     '<select class="stage' + (idx >= GOLDEN_IDX ? " gold" : "") + '" data-stage="' + l.id + '">' + opts + "</select>" +
     '<button class="mini" data-toggle-notes="' + l.id + '">' + (open ? "Hide notes" : (hasNotes ? "Notes •" : "Notes")) + "</button>";
   if (l.status !== "client"){
-    html += '<button class="mini" data-act="park" data-id="' + l.id + '">Park</button>' +
+    html += '<button class="mini" data-act="recontact" data-id="' + l.id + '" title="They replied / you messaged — restart the chase clock">Replied</button>' +
+            '<button class="mini" data-act="park" data-id="' + l.id + '">Park</button>' +
             '<button class="mini danger" data-act="dead" data-id="' + l.id + '">Dead</button>';
   }
   html += rowDelete(l.id) + "</div>";
@@ -813,6 +833,7 @@ function overdueSig(){
       return p.kind === "final" ? "f" : (p.target <= now ? "1" : "0");
     }
     if (l.status === "parked") return (l.parkedUntil && l.parkedUntil <= now) ? "1" : "0";
+    if (l.status === "responded") return "r" + chaseText(l, now).level;
     return "-";
   }).join("");
 }
@@ -828,6 +849,9 @@ function tick(){
     if (l.status === "parked"){
       due = !!(l.parkedUntil && l.parkedUntil <= now);
       text = due ? "RESURFACE" : "Resurface in " + fmtLeft(l.parkedUntil - now);
+    } else if (l.status === "responded"){
+      var cc = chaseText(l, now);
+      text = cc.text; due = cc.due;
     } else {
       var c = cdText(l, now);
       text = c.text; due = c.due; final = c.final;
