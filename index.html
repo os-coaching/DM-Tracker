@@ -91,6 +91,28 @@ nav button.on .n{background:var(--accent-soft);color:var(--accent-text)}
 .quick input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
 .quick input::placeholder{color:var(--faint)}
 
+/* search */
+.search{display:none;gap:8px;align-items:center;padding:0 0 12px}
+.search.on{display:flex}
+.search input{
+  flex:1;min-width:0;font:inherit;font-size:14px;color:var(--text);
+  padding:9px 12px 9px 34px;border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--surface) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16'><circle cx='7' cy='7' r='4.6' fill='none' stroke='%23757F90' stroke-width='1.7'/><path d='M10.6 10.6L14 14' stroke='%23757F90' stroke-width='1.7' stroke-linecap='round'/></svg>") no-repeat left 11px center;
+  transition:border-color .12s,box-shadow .12s;
+}
+.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+.search input::placeholder{color:var(--faint)}
+.search .scount{font-size:12px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+.search .scount.none{color:var(--red)}
+.search #sClear{display:none}
+.search.active #sClear{display:inline-block}
+mark{background:var(--accent-soft);color:var(--accent-text);border-radius:3px;padding:0 1px}
+.row.due mark{background:rgba(255,107,94,.22);color:#FFB3AB}
+.xtab{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:16px 2px 0;font-size:12.5px;color:var(--faint);
+}
+
 /* buttons */
 button.btn{
   appearance:none;font:inherit;font-size:13px;cursor:pointer;border-radius:var(--radius);
@@ -226,6 +248,11 @@ footer .hint{font-size:12px;color:var(--faint)}
       <input id="qa" type="text" placeholder="@handle, then enter to log first DM sent" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <button class="btn" id="qaBtn">Add</button>
     </div>
+    <div class="search" id="searchBar">
+      <input id="sq" type="text" placeholder="Search handles" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <span class="scount" id="sCount"></span>
+      <button class="mini" id="sClear">Clear</button>
+    </div>
   </div>
 </header>
 
@@ -267,7 +294,7 @@ var TABS = [
 
 /* ---------------- state ---------------- */
 var state = load();
-var ui = { tab:"leads", notesOpen:{}, parkedOpen:false, clientsOpen:true };
+var ui = { tab:"leads", notesOpen:{}, parkedOpen:false, clientsOpen:true, q:"" };
 var lastOverdueSig = "";
 
 function load(){
@@ -311,6 +338,28 @@ function esc(s){
   return String(s).replace(/[&<>"']/g, function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
   });
+}
+/* search: normalise a typed query the same way handles are stored */
+function normQ(v){ return String(v || "").trim().replace(/^@+/,"").replace(/\s+/g,"").toLowerCase(); }
+/* -1 no match, 0 starts-with (ranked first), 1 contains */
+function matchRank(handle, q){
+  if (!q) return 0;
+  var i = handle.indexOf(q);
+  if (i < 0) return -1;
+  return i === 0 ? 0 : 1;
+}
+function filterList(list, q){
+  if (!q) return list;
+  return list.filter(function(l){ return matchRank(l.handle, q) > -1; })
+             .sort(function(a,b){ return matchRank(a.handle, q) - matchRank(b.handle, q); });
+}
+/* escaped handle with the matched run wrapped in <mark> */
+function hl(handle){
+  var q = ui.q;
+  if (!q) return esc(handle);
+  var i = handle.indexOf(q);
+  if (i < 0) return esc(handle);
+  return esc(handle.slice(0, i)) + "<mark>" + esc(handle.slice(i, i + q.length)) + "</mark>" + esc(handle.slice(i + q.length));
 }
 function pad(n){ return n < 10 ? "0" + n : "" + n; }
 function plural(n, word){ return n + " " + word + (n === 1 ? "" : "s"); }
@@ -419,6 +468,8 @@ function addLead(raw){
   save();
   clearFlash();
   if (ui.tab === "script" || ui.tab === "dead") ui.tab = "leads";
+  // drop any active filter, otherwise the lead just added could be filtered out of sight
+  if (ui.q){ ui.q = ""; var sqEl = document.getElementById("sq"); if (sqEl) sqEl.value = ""; }
   render();
   return true;
 }
@@ -513,10 +564,24 @@ function renderNav(){
   }).join("");
 }
 
+/* search bar lives in the static header, so typing never loses focus to a re-render */
+function renderSearch(){
+  var bar = document.getElementById("searchBar");
+  var on = ui.tab !== "script";
+  bar.className = "search" + (on ? " on" : "") + (ui.q ? " active" : "");
+  if (!on) return;
+  var hits = state.leads.filter(function(l){ return matchRank(l.handle, ui.q) > -1 && tabOf(l) === ui.tab; }).length;
+  var total = state.leads.filter(function(l){ return tabOf(l) === ui.tab; }).length;
+  var el = document.getElementById("sCount");
+  el.textContent = ui.q ? hits + " of " + total : "";
+  el.className = "scount" + (ui.q && !hits ? " none" : "");
+}
+
 /* ---------------- views ---------------- */
 function render(){
   renderStats();
   renderNav();
+  renderSearch();
   var v = document.getElementById("view");
   if (ui.tab === "leads") v.innerHTML = viewLeads();
   else if (ui.tab === "respond") v.innerHTML = viewRespond();
@@ -531,9 +596,9 @@ function rowDelete(id){ return '<button class="x" data-act="delete" data-id="' +
 
 function viewLeads(){
   var now = Date.now();
-  var list = state.leads.filter(function(l){ return l.status === "waiting"; })
-    .sort(function(a,b){ return sortKey(a,now) - sortKey(b,now); });
-  if (!list.length) return '<div class="empty">No open leads. Add a handle above the moment you send a first DM.</div>';
+  var list = filterList(state.leads.filter(function(l){ return l.status === "waiting"; })
+    .sort(function(a,b){ return sortKey(a,now) - sortKey(b,now); }), ui.q);
+  if (!list.length) return noMatch('No open leads. Add a handle above the moment you send a first DM.');
 
   return "<section>" + list.map(function(l){
     var c = cdText(l, now);
@@ -546,25 +611,43 @@ function viewLeads(){
     acts += rowDelete(l.id);
 
     return '<div class="row' + (c.due ? " due" : "") + '" data-row="' + l.id + '">' +
-      '<div class="rowmain"><span class="handle">@' + esc(l.handle) + "</span>" +
+      '<div class="rowmain"><span class="handle">@' + hl(l.handle) + "</span>" +
       '<span class="cd' + (c.due ? " due" : "") + (c.final ? " final" : "") + '" data-cd="' + l.id + '">' + c.text + "</span></div>" +
       '<div class="acts">' + acts + "</div></div>";
-  }).join("") + "</section>";
+  }).join("") + "</section>" + xtabHint();
+}
+
+/* empty state: plain message normally, match-aware while searching */
+function noMatch(plain){
+  if (!ui.q) return '<div class="empty">' + plain + "</div>";
+  return '<div class="empty">No leads here matching "' + esc(ui.q) + '"</div>' + xtabHint();
+}
+/* where else the current query matches, as buttons that switch tab */
+function xtabHint(){
+  if (!ui.q) return "";
+  var c = {leads:0, respond:0, dead:0};
+  state.leads.forEach(function(l){ if (matchRank(l.handle, ui.q) > -1) c[tabOf(l)]++; });
+  var others = TABS.filter(function(t){ return t.id !== "script" && t.id !== ui.tab && c[t.id] > 0; });
+  if (!others.length) return "";
+  return '<div class="xtab"><span>Also matching:</span>' + others.map(function(t){
+    return '<button class="mini" data-tab="' + t.id + '">' + esc(t.label) + " (" + c[t.id] + ")</button>";
+  }).join("") + "</div>";
 }
 
 function viewRespond(){
-  var active = state.leads.filter(function(l){ return l.status === "responded"; })
-    .sort(function(a,b){ return chaseAnchor(a) - chaseAnchor(b); });   // stalest conversation first
-  var parked = state.leads.filter(function(l){ return l.status === "parked"; })
-    .sort(function(a,b){ return (a.parkedUntil || 0) - (b.parkedUntil || 0); });
-  var clients = state.leads.filter(function(l){ return l.status === "client"; })
-    .sort(function(a,b){ return (b.goldenQAt || b.createdAt) - (a.goldenQAt || a.createdAt); });
+  var active = filterList(state.leads.filter(function(l){ return l.status === "responded"; })
+    .sort(function(a,b){ return chaseAnchor(a) - chaseAnchor(b); }), ui.q);   // stalest conversation first
+  var parked = filterList(state.leads.filter(function(l){ return l.status === "parked"; })
+    .sort(function(a,b){ return (a.parkedUntil || 0) - (b.parkedUntil || 0); }), ui.q);
+  var clients = filterList(state.leads.filter(function(l){ return l.status === "client"; })
+    .sort(function(a,b){ return (b.goldenQAt || b.createdAt) - (a.goldenQAt || a.createdAt); }), ui.q);
 
   var due = parked.filter(function(l){ return l.parkedUntil && l.parkedUntil <= Date.now(); }).length;
   if (due) ui.parkedOpen = true;
 
   var html = "";
-  if (!active.length) html += '<div class="empty">Nobody in conversation right now.</div>';
+  if (!active.length && !parked.length && !clients.length) return noMatch("Nobody in conversation right now.");
+  if (!active.length) html += '<div class="empty">' + (ui.q ? 'No active conversations matching "' + esc(ui.q) + '"' : "Nobody in conversation right now.") + "</div>";
   else html += "<section>" + active.map(convoRow).join("") + "</section>";
 
   if (parked.length){
@@ -579,7 +662,7 @@ function viewRespond(){
     html += '<div class="sechead"><span>Clients</span><span class="cnt">' + clients.length + '</span><span class="line"></span></div>' +
       "<section>" + clients.map(convoRow).join("") + "</section>";
   }
-  return html;
+  return html + xtabHint();
 }
 
 function convoRow(l){
@@ -591,7 +674,7 @@ function convoRow(l){
   var hasNotes = l.notes && l.notes.trim().length > 0;
 
   var html = '<div class="row" data-row="' + l.id + '">' +
-    '<div class="rowmain"><span class="handle">@' + esc(l.handle) + "</span>";
+    '<div class="rowmain"><span class="handle">@' + hl(l.handle) + "</span>";
   if (l.status === "responded"){
     var c = chaseText(l, Date.now());
     html += '<span class="cd' + (c.due ? " due" : "") + '" data-cd="' + l.id + '">' + c.text + "</span>";
@@ -618,7 +701,7 @@ function parkedRow(l){
   var overdue = l.parkedUntil && l.parkedUntil <= now;
   var txt = overdue ? "RESURFACE" : "Resurface in " + fmtLeft(l.parkedUntil - now);
   return '<div class="row' + (overdue ? " due" : "") + '" data-row="' + l.id + '">' +
-    '<div class="rowmain"><span class="handle">@' + esc(l.handle) + "</span>" +
+    '<div class="rowmain"><span class="handle">@' + hl(l.handle) + "</span>" +
     '<span class="cd' + (overdue ? " due" : "") + '" data-cd="' + l.id + '">' + txt + "</span>" +
     '<span class="meta">' + esc(l.stage || "Control Q") + "</span></div>" +
     '<div class="acts">' +
@@ -632,16 +715,16 @@ function parkedRow(l){
 }
 
 function viewDead(){
-  var list = state.leads.filter(function(l){ return l.status === "no_response"; })
-    .sort(function(a,b){ return (b.archivedAt || 0) - (a.archivedAt || 0); });
-  if (!list.length) return '<div class="empty">Nothing archived yet.</div>';
+  var list = filterList(state.leads.filter(function(l){ return l.status === "no_response"; })
+    .sort(function(a,b){ return (b.archivedAt || 0) - (a.archivedAt || 0); }), ui.q);
+  if (!list.length) return noMatch("Nothing archived yet.");
   return "<section>" + list.map(function(l){
     return '<div class="row" data-row="' + l.id + '">' +
-      '<div class="rowmain"><span class="handle">@' + esc(l.handle) + "</span>" +
+      '<div class="rowmain"><span class="handle">@' + hl(l.handle) + "</span>" +
       '<span class="meta">Archived ' + fmtDate(l.archivedAt) + "</span></div>" +
       '<div class="acts"><button class="mini" data-act="revive" data-id="' + l.id + '">Revive</button>' +
       rowDelete(l.id) + "</div></div>";
-  }).join("") + "</section>";
+  }).join("") + "</section>" + xtabHint();
 }
 
 /* ---------------- script ---------------- */
@@ -782,6 +865,17 @@ document.getElementById("qaBtn").addEventListener("click", function(){ submitAdd
 qa.addEventListener("keydown", function(e){
   if (e.key === "Enter"){ e.preventDefault(); submitAdd(); }
 });
+/* search */
+var sq = document.getElementById("sq");
+sq.addEventListener("input", function(){ ui.q = normQ(sq.value); render(); });
+sq.addEventListener("keydown", function(e){
+  if (e.key === "Escape"){ e.preventDefault(); clearSearch(); }
+});
+document.getElementById("sClear").addEventListener("click", function(){ clearSearch(); });
+function clearSearch(){
+  sq.value = ""; ui.q = ""; render(); sq.focus();
+}
+
 function submitAdd(){
   var ok = addLead(qa.value);
   if (ok) qa.value = "";
