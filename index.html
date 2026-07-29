@@ -176,6 +176,14 @@ section{padding:14px 0 4px;display:flex;flex-direction:column;gap:6px}
 .acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .meta{font-size:12px;color:var(--faint);white-space:nowrap}
 .row.due .meta{color:rgba(255,150,140,.72)}
+/* inline notes preview, truncates to whatever width is left */
+.npv{
+  flex:1 1 0;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12.5px;color:var(--muted);cursor:pointer;
+  border-left:2px solid var(--line);padding-left:9px;transition:color .12s;
+}
+.npv:hover{color:var(--text)}
+.row.due .npv{border-left-color:var(--red-line)}
 select.stage{
   font:inherit;font-size:13px;padding:6px 26px 6px 10px;border:1px solid var(--line);
   border-radius:7px;background:var(--surface-2) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23959EAC' stroke-width='1.5'/></svg>") no-repeat right 9px center;
@@ -230,6 +238,7 @@ footer .hint{font-size:12px;color:var(--faint)}
   .row{padding:11px 12px;gap:9px}
   .acts{width:100%;gap:5px}
   .rowmain{flex:1 1 100%}
+  .npv{flex:1 1 100%;border-left:none;padding-left:0;margin-top:1px}  /* no room beside the name on a phone */
   .acts select.stage{flex:1 1 100%;margin-bottom:1px}  /* own line, buttons fit one row below */
   .acts button.mini{padding:6px 9px;flex:0 1 auto}
   .quote{flex-wrap:wrap}
@@ -352,6 +361,12 @@ function filterList(list, q){
   if (!q) return list;
   return list.filter(function(l){ return matchRank(l.handle, q) > -1; })
              .sort(function(a,b){ return matchRank(a.handle, q) - matchRank(b.handle, q); });
+}
+/* one-line notes preview beside the handle; click opens the full editor */
+function notesPreview(l){
+  var n = (l.notes || "").replace(/\s+/g, " ").trim();
+  if (!n || ui.notesOpen[l.id]) return "";
+  return '<span class="npv" data-toggle-notes="' + l.id + '" title="' + esc(n) + '">' + esc(n) + "</span>";
 }
 /* escaped handle with the matched run wrapped in <mark> */
 function hl(handle){
@@ -680,10 +695,11 @@ function convoRow(l){
     html += '<span class="cd' + (c.due ? " due" : "") + '" data-cd="' + l.id + '">' + c.text + "</span>";
   }
   if (l.goldenQAt) html += '<span class="meta">Golden Q ' + fmtDate(l.goldenQAt) + "</span>";
+  html += notesPreview(l);
   html += "</div>" +
     '<div class="acts">' +
     '<select class="stage' + (idx >= GOLDEN_IDX ? " gold" : "") + '" data-stage="' + l.id + '">' + opts + "</select>" +
-    '<button class="mini" data-toggle-notes="' + l.id + '">' + (open ? "Hide notes" : (hasNotes ? "Notes •" : "Notes")) + "</button>";
+    '<button class="mini" data-toggle-notes="' + l.id + '">' + (open ? "Hide notes" : (hasNotes ? "Edit notes" : "Notes")) + "</button>";
   if (l.status !== "client"){
     html += '<button class="mini" data-act="recontact" data-id="' + l.id + '" title="They replied / you messaged — restart the chase clock">Replied</button>' +
             '<button class="mini" data-act="park" data-id="' + l.id + '">Park</button>' +
@@ -703,7 +719,7 @@ function parkedRow(l){
   return '<div class="row' + (overdue ? " due" : "") + '" data-row="' + l.id + '">' +
     '<div class="rowmain"><span class="handle">@' + hl(l.handle) + "</span>" +
     '<span class="cd' + (overdue ? " due" : "") + '" data-cd="' + l.id + '">' + txt + "</span>" +
-    '<span class="meta">' + esc(l.stage || "Control Q") + "</span></div>" +
+    '<span class="meta">' + esc(l.stage || "Control Q") + "</span>" + notesPreview(l) + "</div>" +
     '<div class="acts">' +
       '<button class="mini primary" data-act="unpark" data-id="' + l.id + '">Unpark</button>' +
       '<button class="mini" data-toggle-notes="' + l.id + '">Notes</button>' +
