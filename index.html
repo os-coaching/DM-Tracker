@@ -384,6 +384,25 @@ details.dt td{color:var(--muted)}
 }
 #tip.on{opacity:1}
 
+/* saved prompt block on the script tab */
+.pbox{background:var(--surface);border-radius:var(--radius);padding:13px 15px;margin-bottom:10px}
+.pbox summary{
+  font-size:13px;font-weight:650;cursor:pointer;list-style:none;color:var(--text);
+  letter-spacing:-.01em;
+}
+.pbox summary::-webkit-details-marker{display:none}
+.pbox summary:before{content:"\25B8  ";color:var(--faint)}
+.pbox[open] summary:before{content:"\25BE  "}
+.pbox summary:hover{color:var(--accent-text)}
+.pbar{display:flex;align-items:center;gap:10px;margin:12px 0 9px;flex-wrap:wrap}
+.phint{flex:1 1 160px;font-size:12px;color:var(--faint);min-width:0}
+.ptext{
+  background:var(--bg);border-radius:8px;padding:12px 13px;
+  font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:var(--muted);white-space:pre-wrap;word-break:break-word;
+  max-height:360px;overflow:auto;
+}
+
 /* script tab */
 .stage{background:var(--surface);border-radius:var(--radius);padding:15px 17px;margin-bottom:10px}
 .stage.done{background:transparent;box-shadow:inset 0 0 0 1px var(--line-soft);opacity:.62}
@@ -462,6 +481,52 @@ footer .hint{font-size:12px;color:var(--faint)}
   <div id="view"></div>
 </main>
 <div id="tip" role="status" aria-live="polite"></div>
+
+<!-- Saved prompt text. Held as text/plain so nothing inside it needs JS escaping. -->
+<script type="text/plain" id="aiPromptSrc">
+Open index.html, my existing DM outreach tracker. Add an AI reply-drafting feature. Everything is ADDITIVE: do not break or change any existing flow, tab, countdown, or the localStorage data model. Keep it one self-contained file, vanilla HTML/CSS/JS, no frameworks, no build step. Match the existing design exactly (white, dark text, #0057FF accent, clean and minimal).
+
+WHAT IT DOES
+In the "Leads That Respond" tab, every lead row gets a "Draft" button. Clicking it opens a panel for that lead showing: their handle, their current stage (pre-filled from their dropdown), their notes (editable in place, saves to the same notes field), and a textarea labelled "their latest reply". A Generate button calls the Anthropic API and returns reply drafts in my voice, specific to their message and stage.
+
+API PLUMBING
+- Settings gear in the footer: field for Anthropic API key, field for model (default "claude-sonnet-4-6"), a test button that makes a tiny API call and shows pass/fail. Store both ONLY in localStorage. Never hardcode the key anywhere in the file.
+- Call POST https://api.anthropic.com/v1/messages with headers: x-api-key, anthropic-version: 2023-06-01, content-type: application/json, and anthropic-dangerous-direct-browser-access: true (required for browser calls, do not omit).
+- max_tokens 1000. Instruct the model to return ONLY raw JSON. On response, strip any ``` fences before JSON.parse. Wrap in try/catch. Show clear inline errors for: missing key, invalid key (401), rate limit (429), network offline. Errors must never crash the page.
+
+THE SYSTEM PROMPT (send this as the system parameter on every call, verbatim)
+---
+You draft Instagram DM replies AS Ollie, a UK online fitness coach. You write exactly in his voice.
+
+VOICE, HARD RULES: short choppy messages, casual lowercase-leaning, words like mate, ye, abit, haha. One thought per message. Messages usually under 15 words. Only ONE question per turn and it is always the final message. Never polished multi-clause sentences. Never em dashes. Never the phrases "most lads" or "most people". No corporate words, no emojis, no exclamation spam. Takeaway or park messages may end with no question.
+
+PROOF BANK, THE ONLY CLIENTS THAT EXIST: Harry, army lad, +8lbs in 6 weeks on active service. Leo, uni student, -7kg in 8 weeks. Finn, uni student, +4lbs in 4 weeks. Never invent other clients, results, or numbers.
+
+THE SCRIPT, CHECKPOINT ORDER IS FIXED: Open > Control Q ("you following for the vids or actually looking to get in shape?") > Goal ("what you training towards?", dig once if surface: "what would that actually look like for you?") > Pain 1 ("whats getting in the way at the minute?") > Pain 2 ("what you tried before?") > Mirror (repeat their situation back in their own words, then "that right?") > Golden Q ("do you want me to help you sort it?") > Tie Downs (send proof as a statement then "reckon you could do the same?", "have you worked with a coach before?", "commitment 1-10?" and if 7 or under "what would make it a 9?") > Call (two concrete time slots, never open-ended).
+
+STAGE GATES: Mirror is forbidden until goal, struggle, and what they have tried are all known from their words. Golden Q is forbidden until a mirror was confirmed. The mirror draft must be built ONLY from details they actually said, in the notes or the pasted reply. If details are missing, the correct draft is the missing question, not an invented mirror.
+
+BRANCHES: vids-only or standoffish reply: advise leaving it, draft one light no-question close. Golden Q no: dig once "whats holding you back?", handle a real objection, otherwise clean takeaway "no stress mate, sounds like nows not the time, i'll check back in a few weeks", never guilt. No pain found after digging: park warm, do not invent pain. Local lead (trains at NRG or nearby): call stage becomes meeting at the gym instead of a phone call.
+
+INPUT YOU RECEIVE: their handle, the stage Ollie selected, accumulated notes, their latest reply.
+
+OUTPUT: raw JSON only, no fences, no preamble, exactly this shape:
+{"stage_check":{"selected":"...","correct":"...","reason":"one blunt line"},"drafts":[{"label":"one word angle","messages":["msg1","msg2"]}],"next_checkpoint":"one line on what comes after this send"}
+Rules: 2 or 3 drafts. Each draft is 1 to 3 messages. If Ollie picked the wrong stage, correct it in stage_check and draft for the CORRECT stage.
+---
+
+USER MESSAGE PER CALL: JSON of {handle, selected_stage, notes, latest_reply}.
+
+RENDERING THE RESULT
+- Stage check line at the top: green tick if confirmed. If corrected, amber with the reason and a one-click "update stage" button that sets the lead's stage dropdown to the corrected stage.
+- Each draft as a labelled group of message bubbles. Copy button on every individual bubble (his style is separate messages) plus a copy-all per draft.
+- next_checkpoint as one small grey line at the bottom.
+- "Log exchange" button: appends to the lead's notes a timestamped block, "them: [latest reply]" and "me: [whichever draft he copied last]", so context builds for future drafts.
+- Loading state on Generate, button disabled while a call is in flight.
+
+QUALITY BAR
+Before finishing, test: draft flow end to end with a fake key (clean error), settings save/reload, stage correction path updates the dropdown, log exchange appends correctly, all copy buttons, mobile layout, and confirm every pre-existing tracker feature still works: add lead, countdowns, follow-up buttons, replied path, park, resurface, archive, revive, stats strip, export, import. No console errors.
+</script>
 
 <footer class="wrap">
   <button class="mini" id="exportBtn">Export JSON</button>
@@ -1367,7 +1432,22 @@ function viewScript(){
       "<div><h3>" + esc(s.title) + "</h3>" + (s.sub ? '<div class="sub">(' + esc(s.sub) + ")</div>" : "") + "</div></div>" +
       body + "</div>";
   }).join("");
-  return html + '<div style="padding:6px 0 0"><button class="mini" id="resetChecks">Reset checkpoints</button></div>';
+  return html + '<div style="padding:6px 0 2px"><button class="mini" id="resetChecks">Reset checkpoints</button></div>' +
+    savedPrompts();
+}
+
+/* prompts kept for pasting elsewhere, parked at the bottom so they stay out of the way */
+function savedPrompts(){
+  var el = document.getElementById("aiPromptSrc");
+  if (!el) return "";
+  var txt = el.textContent.replace(/^\s*\n/, "").replace(/\s+$/, "");
+  var words = txt.split(/\s+/).length;
+  return '<div class="sechead"><span>Saved prompts</span><span class="line"></span></div>' +
+    '<details class="pbox"><summary>AI reply drafting, full build spec</summary>' +
+      '<div class="pbar"><span class="phint">' + words + " words. Paste into Claude Code to build the feature.</span>" +
+      '<button class="mini primary" data-copy-src="aiPromptSrc">Copy prompt</button></div>' +
+      '<pre class="ptext">' + esc(txt) + "</pre>" +
+    "</details>";
 }
 
 /* ---------------- hydrate + events ---------------- */
@@ -1384,6 +1464,14 @@ document.addEventListener("click", function(e){
 
   var copy = t.closest("[data-copy]");
   if (copy){ doCopy(copy.getAttribute("data-copy"), copy); return; }
+
+  // long text lives in a text/plain block rather than an attribute
+  var copySrc = t.closest("[data-copy-src]");
+  if (copySrc){
+    var src = document.getElementById(copySrc.getAttribute("data-copy-src"));
+    if (src) doCopy(src.textContent.replace(/^\s*\n/, "").replace(/\s+$/, ""), copySrc);
+    return;
+  }
 
   var a = t.closest("[data-act]");
   if (a){ act(a.getAttribute("data-id"), a.getAttribute("data-act")); return; }
