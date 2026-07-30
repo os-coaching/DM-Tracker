@@ -433,31 +433,8 @@ button.mini.go[disabled]{opacity:.55;cursor:default;filter:none}
 }
 .dwait{font-size:13px;color:var(--muted);padding:10px 0}
 
-/* settings modal */
-.modal{
-  position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.62);
-  display:flex;align-items:center;justify-content:center;padding:20px;
-}
-.modal[hidden]{display:none}
-.mbox{
-  background:var(--surface);border-radius:12px;padding:20px 22px;width:100%;max-width:440px;
-  box-shadow:0 20px 60px rgba(0,0,0,.6);
-}
-.mbox h3{font-size:15px;font-weight:650;letter-spacing:-.01em}
-.msub{font-size:12.5px;color:var(--faint);line-height:1.5;margin-top:6px}
-.fld{display:block;margin-top:14px}
-.fld span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
-.fld input{
-  width:100%;font:inherit;font-size:13.5px;padding:9px 11px;background:var(--bg);
-  color:var(--text);border:1px solid var(--line);border-radius:8px;
-}
-.fld input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
-.fld input::placeholder{color:var(--faint)}
-.mrow{display:flex;align-items:center;gap:8px;margin-top:18px}
-.mrow .sp{flex:1}
-.mres{font-size:12.5px;margin-top:12px;line-height:1.5}
-.mres.ok{color:var(--accent-text)}
-.mres.bad{color:var(--red)}
+.dhint{font-size:12px;color:var(--faint);line-height:1.5;margin-top:6px}
+.dhint b{color:var(--muted);font-weight:600}
 
 /* saved prompt block on the script tab */
 .pbox{background:var(--surface);border-radius:var(--radius);padding:13px 15px;margin-bottom:10px}
@@ -629,28 +606,9 @@ Before finishing, test: draft flow end to end with a fake key (clean error), set
   <button class="mini" id="exportBtn">Export JSON</button>
   <button class="mini" id="importBtn">Import JSON</button>
   <input type="file" id="importFile" accept="application/json,.json" hidden>
-  <button class="mini" id="settingsBtn" title="AI drafting settings">Settings</button>
   <span class="sp"></span>
   <span class="hint" id="totalHint"></span>
 </footer>
-
-<div class="modal" id="settings" hidden>
-  <div class="mbox">
-    <h3>AI drafting</h3>
-    <p class="msub">Your key is stored in this browser only. It is never written into the file and never included in a JSON export.</p>
-    <label class="fld"><span>Anthropic API key</span>
-      <input type="password" id="setKey" placeholder="sk-ant-..." autocomplete="off" spellcheck="false"></label>
-    <label class="fld"><span>Model</span>
-      <input type="text" id="setModel" placeholder="claude-opus-5" autocomplete="off" spellcheck="false"></label>
-    <div class="mres" id="setResult"></div>
-    <div class="mrow">
-      <button class="mini" id="setTest">Test key</button>
-      <span class="sp"></span>
-      <button class="mini" id="setClose">Close</button>
-      <button class="btn" id="setSave">Save</button>
-    </div>
-  </div>
-</div>
 
 <script>
 (function(){
@@ -681,7 +639,7 @@ var TABS = [
 /* ---------------- state ---------------- */
 var state = load();
 var ui = { tab:"leads", notesOpen:{}, parkedOpen:false, clientsOpen:true, q:"", range:30,
-           draftFor:null, draftReply:"", draftResult:null, draftBusy:false, draftError:"", lastCopied:"" };
+           draftFor:null, draftReply:"", draftPaste:"", draftResult:null, draftError:"", lastCopied:"" };
 var lastOverdueSig = "";
 
 function load(){
@@ -1178,143 +1136,54 @@ function viewDead(){
   }).join("") + "</section>" + xtabHint();
 }
 
-/* ---------------- AI drafting ---------------- */
-/* Kept in its own localStorage key, never inside dm_tracker_v1, so the API key
-   can never end up inside an exported backup file. */
-var AI_KEY = "dm_tracker_ai_v1";
-var DEFAULT_MODEL = "claude-opus-5";
+/* ---------------- AI drafting (copy out, paste back) ---------------- */
+/* No API key and no network call. The app builds the prompt, Claude runs it
+   wherever you already pay for it, and the reply is parsed back in here. */
 
-function aiCfg(){
-  try { return JSON.parse(localStorage.getItem(AI_KEY) || "{}") || {}; } catch(e){ return {}; }
-}
-function aiSave(cfg){
-  try { localStorage.setItem(AI_KEY, JSON.stringify(cfg)); } catch(e){}
-}
-function aiModel(){ return (aiCfg().model || "").trim() || DEFAULT_MODEL; }
-
-/* json_schema output means the reply is valid JSON by construction, not by luck */
-var DRAFT_SCHEMA = {
-  type:"object",
-  properties:{
-    stage_check:{
-      type:"object",
-      properties:{ selected:{type:"string"}, correct:{type:"string"}, reason:{type:"string"} },
-      required:["selected","correct","reason"],
-      additionalProperties:false
-    },
-    drafts:{
-      type:"array",
-      items:{
-        type:"object",
-        properties:{ label:{type:"string"}, messages:{type:"array", items:{type:"string"}} },
-        required:["label","messages"],
-        additionalProperties:false
-      }
-    },
-    next_checkpoint:{type:"string"}
-  },
-  required:["stage_check","drafts","next_checkpoint"],
-  additionalProperties:false
-};
-
-function apiErrText(body){
-  try {
-    var j = JSON.parse(body);
-    if (j && j.error && j.error.message) return j.error.message;
-  } catch(e){}
-  return "";
+/* builds the self-contained prompt for one lead */
+function draftPrompt(l){
+  var sys = document.getElementById("aiSystemPrompt").textContent
+    .replace(/^\s*\n/, "").replace(/\s+$/, "");
+  var input = {
+    handle: l.handle,
+    selected_stage: l.stage || "Control Q",
+    notes: l.notes || "",
+    latest_reply: ui.draftReply || ""
+  };
+  return sys + "\n\nINPUT:\n" + JSON.stringify(input, null, 2);
 }
 
-/* one place for every call, so every failure path is handled the same way */
-function callClaude(payload, done){
-  var cfg = aiCfg();
-  if (!cfg.key) return done("No API key saved yet. Open Settings at the bottom of the page and paste your Anthropic key.");
-  var req;
-  try {
-    req = fetch("https://api.anthropic.com/v1/messages", {
-      method:"POST",
-      headers:{
-        "content-type":"application/json",
-        "x-api-key":cfg.key,
-        "anthropic-version":"2023-06-01",
-        "anthropic-dangerous-direct-browser-access":"true"
-      },
-      body: JSON.stringify(payload)
-    });
-  } catch(e){ return done("Could not start the request: " + e.message); }
-
-  req.then(function(r){
-    return r.text().then(function(t){ return { ok:r.ok, status:r.status, text:t }; });
-  }).then(function(res){
-    if (!res.ok){
-      var extra = apiErrText(res.text), msg;
-      if (res.status === 401) msg = "That API key was rejected. Check it in Settings.";
-      else if (res.status === 429) msg = "Rate limited. Wait a few seconds and try again.";
-      else if (res.status === 400) msg = "The API rejected the request. " + (extra || "Check the model name in Settings.");
-      else if (res.status >= 500) msg = "Anthropic had a server error (" + res.status + "). Try again shortly.";
-      else msg = "Request failed (" + res.status + "). " + extra;
-      return done(msg);
-    }
-    var data;
-    try { data = JSON.parse(res.text); }
-    catch(e){ return done("Could not read the reply from the API."); }
-    done(null, data);
-  })["catch"](function(){
-    /* fetch only rejects on network or CORS, never on an HTTP error status */
-    if (navigator.onLine === false) return done("You are offline. Drafting needs an internet connection.");
-    done("Could not reach the API." + (location.protocol === "file:"
-      ? " You are running this from a file on your hard drive, which browsers often block. Try the hosted copy instead."
-      : " Check your connection and try again."));
-  });
+/* tolerant: claude.ai may wrap the JSON in a fence or add a line of preamble */
+function extractJson(txt){
+  txt = String(txt || "").trim();
+  if (!txt) return null;
+  txt = txt.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  try { return JSON.parse(txt); } catch(e){}
+  var a = txt.indexOf("{"), b = txt.lastIndexOf("}");
+  if (a > -1 && b > a){
+    try { return JSON.parse(txt.slice(a, b + 1)); } catch(e){}
+  }
+  return null;
 }
 
-function textOf(data){
-  var out = "";
-  (data && data.content || []).forEach(function(b){ if (b && b.type === "text" && b.text) out += b.text; });
-  return out;
-}
-
-function parseDraft(data){
-  if (data.stop_reason === "refusal") throw new Error("The model declined to answer this one. Try rewording the reply you pasted.");
-  var txt = textOf(data).trim();
-  if (!txt) throw new Error(data.stop_reason === "max_tokens"
-    ? "The reply was cut short. Try again, or shorten the notes."
-    : "The model returned nothing. Try again.");
-  txt = txt.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();   // fences, just in case
-  var o;
-  try { o = JSON.parse(txt); }
-  catch(e){ throw new Error("The reply was not readable JSON. Try again."); }
-  if (!o || !o.stage_check || !Array.isArray(o.drafts)) throw new Error("The reply was not in the expected shape. Try again.");
+function readDraft(id){
+  var raw = (ui.draftPaste || "").trim();
+  if (!raw){ ui.draftError = "Paste Claude's reply into the box first."; ui.draftResult = null; render(); return; }
+  var o = extractJson(raw);
+  if (!o){
+    ui.draftError = "Could not find the JSON in that. Copy Claude's whole reply, including the braces.";
+    ui.draftResult = null; render(); return;
+  }
+  if (!o.stage_check || !Array.isArray(o.drafts)){
+    ui.draftError = "That JSON is not in the expected shape. Make sure you pasted the reply to this prompt.";
+    ui.draftResult = null; render(); return;
+  }
   o.drafts = o.drafts.filter(function(d){ return d && Array.isArray(d.messages) && d.messages.length; });
-  if (!o.drafts.length) throw new Error("No drafts came back. Try again.");
-  return o;
-}
-
-function generateDraft(id){
-  var l = byId(id);
-  if (!l || ui.draftBusy) return;
-  var sysEl = document.getElementById("aiSystemPrompt");
-  ui.draftBusy = true; ui.draftError = ""; ui.draftResult = null;
-  render();
-
-  callClaude({
-    model: aiModel(),
-    max_tokens: 4000,
-    system: sysEl.textContent.replace(/^\s*\n/, "").replace(/\s+$/, ""),
-    output_config: { effort:"medium", format:{ type:"json_schema", schema:DRAFT_SCHEMA } },
-    messages: [{ role:"user", content: JSON.stringify({
-      handle: l.handle,
-      selected_stage: l.stage || "Control Q",
-      notes: l.notes || "",
-      latest_reply: ui.draftReply || ""
-    }) }]
-  }, function(err, data){
-    ui.draftBusy = false;
-    if (err){ ui.draftError = err; render(); return; }
-    try { ui.draftResult = parseDraft(data); ui.draftError = ""; }
-    catch(e){ ui.draftError = e.message; ui.draftResult = null; }
-    render();
-  });
+  if (!o.drafts.length){
+    ui.draftError = "No drafts in that reply. Ask Claude to try again.";
+    ui.draftResult = null; render(); return;
+  }
+  ui.draftResult = o; ui.draftError = ""; render();
 }
 
 /* appends a dated exchange to the lead's notes so later drafts have the history */
@@ -1334,18 +1203,21 @@ function logExchange(id){
 
 function draftPanel(l){
   var html = '<div class="draft">' +
-    '<h5>Their latest reply</h5>' +
+    "<h5>Their latest reply</h5>" +
     '<textarea data-reply placeholder="paste what they just sent you"></textarea>' +
-    '<h5>Notes</h5>' +
+    "<h5>Notes</h5>" +
     '<textarea data-notes="' + l.id + '" placeholder="their goal + pain in their exact words (for the mirror message)"></textarea>' +
     '<div class="drow"><span class="dstage">Drafting for stage <b>' + esc(l.stage || "Control Q") + "</b></span>" +
       '<span class="sp"></span>' +
       '<button class="mini" data-act="logex" data-id="' + l.id + '">Log exchange</button>' +
-      '<button class="mini go" data-gen="' + l.id + '"' + (ui.draftBusy ? " disabled" : "") + ">" +
-        (ui.draftBusy ? "Drafting..." : "Generate") + "</button></div>";
+      '<button class="mini go" data-copyprompt="' + l.id + '">Copy prompt</button></div>' +
+    '<div class="dhint">Paste it into <b>claude.ai</b> or the Claude app, then paste the reply back below.</div>' +
+    "<h5>Claude's reply</h5>" +
+    '<textarea data-paste placeholder="paste the JSON Claude gives you"></textarea>' +
+    '<div class="drow"><span class="sp"></span>' +
+      '<button class="mini go" data-read="' + l.id + '">Read it in</button></div>';
 
-  if (ui.draftBusy) html += '<div class="dwait">Thinking through the stage gates...</div>';
-  else if (ui.draftError) html += '<div class="derr">' + esc(ui.draftError) + "</div>";
+  if (ui.draftError) html += '<div class="derr">' + esc(ui.draftError) + "</div>";
   else if (ui.draftResult) html += draftResultHtml(l, ui.draftResult);
 
   return html + "</div>";
@@ -1355,7 +1227,7 @@ function draftResultHtml(l, r){
   var sc = r.stage_check || {}, html = "";
   var corrected = sc.correct && sc.selected && sc.correct !== sc.selected;
   html += '<div class="chk ' + (corrected ? "warn" : "ok") + '">' +
-    '<span class="ci">' + (corrected ? "!" : "✓") + "</span><div class=\"ct\">";
+    '<span class="ci">' + (corrected ? "!" : "✓") + '</span><div class="ct">';
   if (corrected){
     html += "<b>Drafted for " + esc(sc.correct) + ", not " + esc(sc.selected) + "</b>" + esc(sc.reason || "");
     if (STAGES.indexOf(sc.correct) > -1){
@@ -1368,7 +1240,7 @@ function draftResultHtml(l, r){
 
   r.drafts.forEach(function(d, i){
     var all = d.messages.join("\n");
-    html += '<div class="dgrp"><div class="dh"><span class="dlab">' + esc(d.label || ("Draft " + (i+1))) + "</span>" +
+    html += '<div class="dgrp"><div class="dh"><span class="dlab">' + esc(d.label || ("Draft " + (i + 1))) + "</span>" +
       '<button class="mini" data-copy="' + esc(all) + '" data-draft>Copy all ' + d.messages.length + "</button></div>";
     d.messages.forEach(function(m){
       html += '<div class="bub"><p>' + esc(m) + '</p><button class="mini" data-copy="' + esc(m) + '" data-draft>Copy</button></div>';
@@ -1379,7 +1251,6 @@ function draftResultHtml(l, r){
   if (r.next_checkpoint) html += '<div class="dnext">Next: ' + esc(r.next_checkpoint) + "</div>";
   return html;
 }
-
 /* ---------------- statistics ---------------- */
 function startOfDay(ts){ var d = new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
 function fmtShort(ts){
@@ -1781,6 +1652,8 @@ function hydrate(){
   });
   var rp = document.querySelector("[data-reply]");
   if (rp) rp.value = ui.draftReply || "";
+  var pb = document.querySelector("[data-paste]");
+  if (pb) pb.value = ui.draftPaste || "";
 }
 
 document.addEventListener("click", function(e){
@@ -1798,15 +1671,25 @@ document.addEventListener("click", function(e){
   if (df){
     var did = df.getAttribute("data-draftfor");
     if (ui.draftFor === did){ ui.draftFor = null; }
-    else { ui.draftFor = did; ui.draftReply = ""; ui.draftResult = null; ui.draftError = ""; ui.lastCopied = ""; }
+    else {
+      ui.draftFor = did; ui.draftReply = ""; ui.draftPaste = "";
+      ui.draftResult = null; ui.draftError = ""; ui.lastCopied = "";
+    }
     render();
     var ta = document.querySelector("[data-reply]");
     if (ta) ta.focus();
     return;
   }
 
-  var gen = t.closest("[data-gen]");
-  if (gen){ generateDraft(gen.getAttribute("data-gen")); return; }
+  var cp = t.closest("[data-copyprompt]");
+  if (cp){
+    var lead = byId(cp.getAttribute("data-copyprompt"));
+    if (lead) doCopy(draftPrompt(lead), cp);
+    return;
+  }
+
+  var rd = t.closest("[data-read]");
+  if (rd){ readDraft(rd.getAttribute("data-read")); return; }
 
   var ss = t.closest("[data-setstage]");
   if (ss){ setStage(ss.getAttribute("data-setstage"), ss.getAttribute("data-stage-to")); return; }
@@ -1853,9 +1736,12 @@ document.addEventListener("change", function(e){
 });
 
 document.addEventListener("input", function(e){
+  /* both held in ui, not saved, so there is no re-render while typing */
   if (e.target.hasAttribute && e.target.hasAttribute("data-reply")){
-    ui.draftReply = e.target.value;   // held in ui, not saved, so no re-render while typing
-    return;
+    ui.draftReply = e.target.value; return;
+  }
+  if (e.target.hasAttribute && e.target.hasAttribute("data-paste")){
+    ui.draftPaste = e.target.value; return;
   }
   var id = e.target.getAttribute && e.target.getAttribute("data-notes");
   if (!id) return;
@@ -1909,52 +1795,6 @@ function legacyCopy(text, done){
   try { document.execCommand("copy"); done(); } catch(e){ flash("Copy failed, select the text manually.", false); }
   document.body.removeChild(ta);
 }
-
-/* ---------------- settings ---------------- */
-var setBox = document.getElementById("settings");
-var setKey = document.getElementById("setKey");
-var setModel = document.getElementById("setModel");
-var setResult = document.getElementById("setResult");
-
-function openSettings(){
-  var c = aiCfg();
-  setKey.value = c.key || "";
-  setModel.value = c.model || "";
-  setModel.placeholder = DEFAULT_MODEL;
-  setResult.textContent = ""; setResult.className = "mres";
-  setBox.hidden = false;
-  setKey.focus();
-}
-function closeSettings(){ setBox.hidden = true; }
-
-document.getElementById("settingsBtn").addEventListener("click", openSettings);
-document.getElementById("setClose").addEventListener("click", closeSettings);
-setBox.addEventListener("click", function(e){ if (e.target === setBox) closeSettings(); });
-document.addEventListener("keydown", function(e){
-  if (e.key === "Escape" && !setBox.hidden) closeSettings();
-});
-document.getElementById("setSave").addEventListener("click", function(){
-  aiSave({ key: setKey.value.trim(), model: setModel.value.trim() });
-  closeSettings();
-  flash("Settings saved in this browser.", true);
-});
-document.getElementById("setTest").addEventListener("click", function(){
-  var btn = this;
-  aiSave({ key: setKey.value.trim(), model: setModel.value.trim() });   // test what is on screen
-  setResult.textContent = "Testing..."; setResult.className = "mres";
-  btn.disabled = true;
-  callClaude({
-    model: aiModel(),
-    max_tokens: 16,
-    thinking: { type:"disabled" },
-    messages: [{ role:"user", content:"Say OK." }]
-  }, function(err){
-    btn.disabled = false;
-    if (err){ setResult.textContent = err; setResult.className = "mres bad"; return; }
-    setResult.textContent = "Working. Key and model " + aiModel() + " both accepted.";
-    setResult.className = "mres ok";
-  });
-});
 
 /* ---------------- chart tooltips ---------------- */
 var tipEl = document.getElementById("tip");
