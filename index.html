@@ -193,6 +193,9 @@ section{padding:14px 0 4px;display:flex;flex-direction:column;gap:6px}
 .acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .meta{font-size:12px;color:var(--faint);white-space:nowrap}
 .row.due .meta{color:rgba(255,150,140,.72)}
+/* you have nudged them and they still owe you a reply */
+.meta.chased{color:var(--red);opacity:.85}
+.row.due .meta.chased{color:#FFB3AB;opacity:1}
 /* ---------- follow-up board (Leads tab) ---------- */
 /* minmax(0,1fr), not 1fr: long overdue pills otherwise stretch one column and squeeze the rest */
 .board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:start}
@@ -662,6 +665,7 @@ function normalise(l){
     memeSentAt: num(l.memeSentAt, null),
     repliedAt: num(l.repliedAt, null),
     lastReplyAt: num(l.lastReplyAt, num(l.repliedAt, num(l.createdAt, num(l.firstDmAt, Date.now())))),
+    chasedAt: num(l.chasedAt, null),
     status: ["waiting","responded","no_response","parked","client"].indexOf(l.status) > -1 ? l.status : "waiting",
     stage: STAGES.indexOf(l.stage) > -1 ? l.stage : null,
     goldenQAt: num(l.goldenQAt, null),
@@ -800,7 +804,15 @@ function sortKey(l, now){
 }
 
 /* chase-up model for a lead in conversation (tab 2) */
-function chaseAnchor(l){ return l.lastReplyAt || l.repliedAt || l.createdAt || Date.now(); }
+/* the clock runs from the last thing that happened either way: their reply, or your chase */
+function chaseAnchor(l){
+  var base = l.lastReplyAt || l.repliedAt || l.createdAt || Date.now();
+  return (l.chasedAt && l.chasedAt > base) ? l.chasedAt : base;
+}
+/* true once you have nudged them and they still have not come back */
+function awaitingSinceChase(l){
+  return !!(l.chasedAt && l.chasedAt > (l.lastReplyAt || l.repliedAt || 0));
+}
 function chaseText(l, now){
   var a = chaseAnchor(l);
   if (now < a + CHASE1_AFTER) return { text:"Chase in " + fmtLeft(a + CHASE1_AFTER - now), due:false, level:0 };
@@ -836,7 +848,7 @@ function addLead(raw){
   state.leads.push({
     id: uid(), handle: h, firstDmAt: now, followUp1SentAt:null, memeSentAt:null,
     repliedAt:null, status:"waiting", stage:null, goldenQAt:null, notes:"",
-    parkedUntil:null, archivedAt:null, createdAt: now
+    parkedUntil:null, archivedAt:null, chasedAt:null, createdAt: now
   });
   save();
   clearFlash();
@@ -855,11 +867,14 @@ function act(id, what){
   if (what === "followup"){ l.followUp1SentAt = now; }
   else if (what === "meme"){ l.memeSentAt = now; if (!l.followUp1SentAt) l.followUp1SentAt = now; }
   else if (what === "replied"){
-    l.repliedAt = now; l.lastReplyAt = now; l.status = "responded"; l.stage = "Control Q";
+    l.repliedAt = now; l.lastReplyAt = now; l.chasedAt = null; l.status = "responded"; l.stage = "Control Q";
     l.parkedUntil = null; l.archivedAt = null;
     ui.tab = "respond";
   }
-  else if (what === "recontact"){ l.lastReplyAt = now; }
+  /* they came back: clear the chase flag, the conversation is warm again */
+  else if (what === "recontact"){ l.lastReplyAt = now; l.chasedAt = null; }
+  /* you nudged them: stops the red, but they still owe you a reply */
+  else if (what === "chased"){ l.chasedAt = now; }
   else if (what === "logex"){ logExchange(id); return; }
   else if (what === "archive" || what === "dead"){
     l.status = "no_response"; l.archivedAt = now; l.parkedUntil = null;
@@ -868,11 +883,11 @@ function act(id, what){
     l.status = "parked"; l.parkedUntil = now + PARK_FOR; ui.parkedOpen = true;
   }
   else if (what === "unpark"){
-    l.status = "responded"; l.parkedUntil = null; l.lastReplyAt = now;
+    l.status = "responded"; l.parkedUntil = null; l.lastReplyAt = now; l.chasedAt = null;
   }
   else if (what === "revive"){
     l.status = "responded"; l.stage = "Control Q"; l.archivedAt = null; l.parkedUntil = null;
-    l.lastReplyAt = now;
+    l.lastReplyAt = now; l.chasedAt = null;
     if (!l.repliedAt) l.repliedAt = now;
     ui.tab = "respond";
   }
@@ -1083,6 +1098,9 @@ function convoRow(l){
     var c = chaseText(l, Date.now());
     html += '<span class="cd' + (c.due ? " due" : "") + '" data-cd="' + l.id + '">' + c.text + "</span>";
   }
+  if (l.status === "responded" && awaitingSinceChase(l)){
+    html += '<span class="meta chased">chased ' + fmtShort(l.chasedAt) + "</span>";
+  }
   if (l.goldenQAt) html += '<span class="meta">Golden Q ' + fmtDate(l.goldenQAt) + "</span>";
   html += notesPreview(l);
   html += "</div>" +
@@ -1091,7 +1109,10 @@ function convoRow(l){
     '<button class="mini' + (ui.draftFor === l.id ? " primary" : "") + '" data-draftfor="' + l.id + '">Draft</button>' +
     '<button class="mini" data-toggle-notes="' + l.id + '">' + (open ? "Hide notes" : (hasNotes ? "Edit notes" : "Notes")) + "</button>";
   if (l.status !== "client"){
-    html += '<button class="mini" data-act="recontact" data-id="' + l.id + '" title="They replied, or you messaged. Restarts the chase clock">Replied</button>' +
+    if (l.status === "responded"){
+      html += '<button class="mini chase" data-act="chased" data-id="' + l.id + '" title="You nudged them and they have not replied yet. Clears the red for another day">Chase sent</button>';
+    }
+    html += '<button class="mini" data-act="recontact" data-id="' + l.id + '" title="They came back to you. Restarts the clock and clears the chase flag">Replied</button>' +
             '<button class="mini" data-act="park" data-id="' + l.id + '">Park</button>' +
             '<button class="mini danger" data-act="dead" data-id="' + l.id + '">Dead</button>';
   }
@@ -1276,6 +1297,7 @@ function dailySeries(days){
     bump(l.repliedAt, "replies");
     bump(l.followUp1SentAt, "chases");
     bump(l.memeSentAt, "chases");
+    bump(l.chasedAt, "chases");   // conversation nudges count as chases too
   });
   return out;
 }
@@ -1502,7 +1524,8 @@ function viewStats(){
 
   /* activity */
   html += '<div class="card"><h4>Outreach activity</h4><div class="csub">Last ' + days + " days: " +
-    rangeTotals.opens + " first DMs, " + rangeTotals.replies + " replies, " + rangeTotals.chases + " chases</div>" +
+    plural(rangeTotals.opens, "first DM") + ", " + plural(rangeTotals.replies, "reply", "replies") +
+    ", " + plural(rangeTotals.chases, "chase") + "</div>" +
     '<div class="legrow">' +
       '<span class="li"><span class="sw" style="background:#656F7F"></span>First DMs sent</span>' +
       '<span class="li"><span class="sw" style="background:#2F6DFF"></span>Replies received</span>' +
