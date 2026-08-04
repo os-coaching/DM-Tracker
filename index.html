@@ -219,9 +219,14 @@ section{padding:14px 0 4px;display:flex;flex-direction:column;gap:6px}
 .ltop{display:flex;align-items:center;gap:9px}
 .ltop .handle{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ltop .pill{flex:0 0 auto}
+.ltop .x{flex:0 0 auto;margin-right:-4px}
 .lmeta{font-size:11.5px;color:var(--faint);margin-top:5px}
 .lcard.due .lmeta{color:rgba(255,150,140,.7)}
-.lcard .acts{margin-top:9px}
+.lcard .acts{margin-top:9px;gap:5px}
+/* trimmed so a card's buttons fit one line where they can, and break
+   cleanly two-and-two where they cannot, rather than orphaning the delete */
+.lcard .acts button.mini{padding:6px 9px}
+.lcard .acts button.mini.go{padding:7px 13px}
 .pill{
   font-size:11px;padding:3px 9px;border-radius:20px;background:var(--surface-2);
   color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums;
@@ -993,7 +998,7 @@ function viewLeads(){
   var cols = [
     { kind:"followup", title:"1st follow-up", rule:"Day 3 after the first DM" },
     { kind:"meme",     title:"2nd follow-up", rule:"Day 7, the meme nudge" },
-    { kind:"final",    title:"No reply",      rule:"Both nudges sent, ready to archive" }
+    { kind:"final",    title:"No reply",      rule:"Both nudges sent, nothing back" }
   ];
   var shown = 0;
   cols.forEach(function(c){
@@ -1020,15 +1025,16 @@ function leadCard(l){
     '" title="They replied. Moves them into the conversation pipeline">Replied</button>';
   var when;
   if (p.kind === "followup"){
-    acts += '<button class="mini chase" data-act="followup" data-id="' + l.id + '">Follow-up sent</button>';
+    acts += '<button class="mini chase" data-act="followup" data-id="' + l.id + '">Follow-up</button>';
     when = "First DM " + fmtShort(l.firstDmAt);
   } else if (p.kind === "meme"){
-    acts += '<button class="mini chase" data-act="meme" data-id="' + l.id + '">Meme sent</button>';
+    acts += '<button class="mini chase" data-act="meme" data-id="' + l.id + '">Meme</button>';
     when = "Follow-up " + fmtShort(l.followUp1SentAt);
   } else {
-    acts += '<button class="mini" data-act="archive" data-id="' + l.id + '">Archive</button>';
     when = "Meme " + fmtShort(l.memeSentAt);
   }
+  /* bin them from any column, not just once both nudges are spent */
+  acts += '<button class="mini danger" data-act="dead" data-id="' + l.id + '">Dead</button>';
   return '<div class="lcard' + (c.due ? " due" : "") + '" data-row="' + l.id + '">' +
     '<div class="ltop"><span class="handle">@' + hl(l.handle) + "</span>" +
       '<span class="cd pill' + (c.due ? " due" : "") + (c.final ? " final" : "") + '" data-cd="' + l.id + '">' + c.text + "</span></div>" +
